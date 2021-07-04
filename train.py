@@ -1,3 +1,7 @@
+from models.utilities import calibration_curve
+from numpy.core.fromnumeric import diagonal
+from tqdm.std import tqdm
+from models.curvatures import BlockDiagonal, EFB, INF, KFAC
 from data import *
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
@@ -14,6 +18,7 @@ import torch.nn.init as init
 import torch.utils.data as data
 import numpy as np
 import argparse
+import visdom
 
 
 def str2bool(v):
@@ -67,8 +72,9 @@ else:
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
+viz = visdom.Visdom()
 
-def train():
+def train(continue_flag):
     if args.dataset == 'COCO':
         if args.dataset_root == VOC_ROOT:
             if not os.path.exists(COCO_ROOT):
@@ -87,10 +93,6 @@ def train():
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
-
-    if args.visdom:
-        import visdom
-        viz = visdom.Visdom()
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
@@ -121,6 +123,85 @@ def train():
                           weight_decay=args.weight_decay)
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
+
+    def bnn_wrapper():
+            # assuming the default voc database
+        net = build_ssd('test', 300, 21)            # initialize SSD
+        net.load_state_dict(torch.load(args.trained_model))
+        optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+                weight_decay=args.weight_decay)
+
+        # get block diagonal Fisher information matrix
+        diag = BlockDiagonal(net)
+        for images, labels in tqdm(data_loader):
+            logits = net(images)
+            dist = torch.distributions.Categorical(logits=logits)
+            # A rank-10 diagonal FiM approximation.
+            for sample in range(10):
+                labels = dist.sample()
+                loss = criterion(logits, labels)
+                optimizer.zero_grad()
+                loss.backward(retain_graph=True)
+                diag.update(batch_size=images.size(0))
+
+        # compute KFAC Fisher Information Matrix
+        kfac = KFAC(net)
+        # data_loader = data.DataLoader(dataset, args.batch_size,
+        #                         num_workers=args.num_workers,
+        #                         shuffle=True, collate_fn=detection_collate,
+        #                         pin_memory=True)
+
+
+        for images, label in tqdm(data_loader):
+            logits = net(images)
+            dist = torch.distributions.Categorical(logits=logits)
+            # A rank-1 Kronecker factored FiM approximation.
+            labels = dist.sample()
+            loss = criterion(logits, labels)
+            optimizer.zero_grad()
+            loss.backward()
+            kfac.update(batch_size=images.size(0))
+
+        # compute the eigenvalue corrected diagonal
+        efb = EFB(net.model, kfac.state)
+        for images, labels in tqdm(data_loader):
+            logits = net(images)
+            dist = torch.distributions.Categorical(logits=logits)
+            for sample in range(10):
+                labels = dist.sample()
+                loss = criterion(logits, labels)
+                optimizer.zero_grad()
+                loss.backward(retain_graph=True)
+                efb.update(batch_size=images.size(0))
+
+        # compute the diagonal correction term D
+        inf = INF(net.model, diag.state, kfac.state, efb.state)
+        inf.update(rank=100)
+
+        # inversion and sampling
+        estimator = inf
+        add = 1e15
+        multiply = 1e20
+        estimator.invert(add, multiply)
+
+        mean_predictions = 0
+        samples = 10  # 10 Monte Carlo samples from the weight posterior.
+
+        with torch.no_grad():
+            for sample in range(samples):
+                estimator.sample_and_replace()
+                predictions, labels = net.eval(data_loader)
+                mean_predictions += predictions
+            mean_predictions /= samples
+        print(f"KFAC Accuracy: {100 * np.mean(np.argmax(mean_predictions.cpu().numpy(), axis=1) == labels.numpy()):.2f}%")
+
+        # calibration
+        ece_bnn = calibration_curve(mean_predictions.cpu().numpy(), labels.numpy())[0]
+        print(f"ECE BNN: {100 * ece_bnn:.2f}%")
+
+    if continue_flag:
+        bnn_wrapper()
+        return
 
     net.train()
     # loss counters
@@ -198,7 +279,6 @@ def train():
     torch.save(ssd_net.state_dict(),
                args.save_folder + '' + args.dataset + '.pth')
 
-
 def adjust_learning_rate(optimizer, gamma, step):
     """Sets the learning rate to the initial LR decayed by 10 at every
         specified step
@@ -252,4 +332,4 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
 
 
 if __name__ == '__main__':
-    train()
+    train(False)
