@@ -28,9 +28,9 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO'],
+parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
                     type=str, help='VOC or COCO')
-parser.add_argument('--dataset_root', default=VOC_ROOT,
+parser.add_argument('--dataset_root', default=COCO_ROOT, # osp.join('data/coco/') OR osp.join("data/VOCdevkit/")
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
@@ -97,7 +97,7 @@ def train(continue_flag):
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
 
-    if args.cuda:
+    if args.cuda and torch.cuda.is_available():
         net = torch.nn.DataParallel(ssd_net)
         cudnn.benchmark = True
 
@@ -109,7 +109,7 @@ def train(continue_flag):
         print('Loading base network...')
         ssd_net.vgg.load_state_dict(vgg_weights)
 
-    if args.cuda:
+    if args.cuda and torch.cuda.is_available():
         net = net.cuda()
 
     if not args.resume:
