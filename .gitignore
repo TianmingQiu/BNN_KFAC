@@ -7,6 +7,8 @@ data/*
 !data/voc0712.py
 !data/scripts
 
+weights/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
