@@ -7,6 +7,9 @@ Toy examples on Kronecker Factoried Bayesian neural network
 - [KFAC repo 2](https://github.com/AlexImmer/BNN-predictions/blob/main/preds/kron.py)
 - [Git commit conventions](https://www.conventionalcommits.org/en/v1.0.0/): [create a template](https://backlog.com/blog/git-commit-messages-bold-daring/)
 
+# Laplace Approximation:
+Consult https://github.com/DLR-RM/curvature/tree/main/curvature
+
 # SSD: Single Shot MultiBox Object Detector, in PyTorch
 A [PyTorch](http://pytorch.org/) implementation of [Single Shot MultiBox Detector](http://arxiv.org/abs/1512.02325) from the 2016 paper by Wei Liu, Dragomir Anguelov, Dumitru Erhan, Christian Szegedy, Scott Reed, Cheng-Yang, and Alexander C. Berg.  The official and original Caffe code can be found [here](https://github.com/weiliu89/caffe/tree/ssd).
 

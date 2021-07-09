@@ -25,6 +25,8 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 
+PATH_TO_WEIGHTS = 'weights/COCO_1000.pth'
+
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
@@ -36,7 +38,7 @@ parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
 parser.add_argument('--batch_size', default=32, type=int,
                     help='Batch size for training')
-parser.add_argument('--resume', default=None, type=str,
+parser.add_argument('--resume', default= PATH_TO_WEIGHTS, type=str,
                     help='Checkpoint state_dict file to resume training from')
 parser.add_argument('--start_iter', default=0, type=int,
                     help='Resume training at this iter')
@@ -125,15 +127,33 @@ def train(continue_flag):
                              False, args.cuda)
 
     def bnn_wrapper():
-            # assuming the default voc database
-        net = build_ssd('test', 300, 21)            # initialize SSD
-        net.load_state_dict(torch.load(args.trained_model))
+        # assuming the default voc database
+        net = build_ssd('test', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
+        net.load_state_dict(torch.load(args.resume))
+        net.cuda()
         optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                 weight_decay=args.weight_decay)
+        data_loader = data.DataLoader(dataset, args.batch_size,
+                        num_workers=args.num_workers,
+                        shuffle=True, collate_fn=detection_collate,
+                        pin_memory=True)
 
-        # get block diagonal Fisher information matrix
+        # get BLOCK DIAGONAL INFORMATION MATRIX
+        # Now we can compute the simplest curvature approximation: The diagonal Fisher information matrix (IM). 
+        # This is done in a very similar way to a standard PyTorch training loop, 
+        # except that we sample our labels from the output distribution of the trained model to obtain the IM 
+        # instead of the 'empirical' IM which uses labels from the data distribution and replace the optimizer by the update of our curvature estimator.
+
+        # This will give a rank-1 approximation of the IM. If a better approximation is desired, use more samples from the model output distribution.
+        
         diag = BlockDiagonal(net)
-        for images, labels in tqdm(data_loader):
+        batch_iterator = iter(data_loader)
+
+        for iteration in range(args.start_iter, cfg['max_iter']):
+            
+            images, labels = next(batch_iterator)
+            images = Variable(images.cuda())
+            labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
             logits = net(images)
             dist = torch.distributions.Categorical(logits=logits)
             # A rank-10 diagonal FiM approximation.
@@ -146,13 +166,13 @@ def train(continue_flag):
 
         # compute KFAC Fisher Information Matrix
         kfac = KFAC(net)
-        # data_loader = data.DataLoader(dataset, args.batch_size,
-        #                         num_workers=args.num_workers,
-        #                         shuffle=True, collate_fn=detection_collate,
-        #                         pin_memory=True)
 
+        for iteration in range(args.start_iter, cfg['max_iter']):
 
-        for images, label in tqdm(data_loader):
+            images, labels = next(batch_iterator)
+            images = Variable(images.cuda())
+            labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
+
             logits = net(images)
             dist = torch.distributions.Categorical(logits=logits)
             # A rank-1 Kronecker factored FiM approximation.
@@ -335,4 +355,4 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
 
 
 if __name__ == '__main__':
-    train(False)
+    train(1)
