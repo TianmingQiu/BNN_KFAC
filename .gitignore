@@ -6,6 +6,7 @@ data/*
 !data/coco.py
 !data/voc0712.py
 !data/scripts
+!data/config.py
 
 weights/*
 
