@@ -9,6 +9,7 @@ data/*
 !data/config.py
 
 weights/*
+eval/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

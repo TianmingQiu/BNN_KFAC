@@ -280,7 +280,7 @@ def train(continue_flag):
             torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
                        repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(),
-               args.save_folder + '' + args.dataset + '.pth')
+               args.save_folder + '' + args.dataset + '_' + cfg.max_iter + '.pth')
 
 def adjust_learning_rate(optimizer, gamma, step):
     """Sets the learning rate to the initial LR decayed by 10 at every
