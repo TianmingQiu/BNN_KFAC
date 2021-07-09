@@ -125,7 +125,8 @@ class COCODetection(data.Dataset):
         target = self.coco.loadAnns(ann_ids)
         path = osp.join(self.root, self.coco.loadImgs(img_id)[0]['file_name'])
         assert osp.exists(path), 'Image path does not exist: {}'.format(path)
-        img = cv2.imread(osp.join(self.root, path))
+        # DEBUG: img = cv2.imread(osp.join(self.root, path))
+        img = cv2.imread(path)
         height, width, _ = img.shape
         if self.target_transform is not None:
             target = self.target_transform(target, width, height)
