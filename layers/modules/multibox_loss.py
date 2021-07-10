@@ -58,15 +58,16 @@ class MultiBoxLoss(nn.Module):
                 shape: [batch_size,num_objs,5] (last idx is the label).
         """
         loc_data, conf_data, priors = predictions
-        num = loc_data.size(0)
-        priors = priors[:loc_data.size(1), :]
+        num_batches = loc_data.size(0)
+        num_priors = loc_data.size(1)
+        priors = priors[:num_priors, :]
         num_priors = (priors.size(0))
         num_classes = self.num_classes
 
         # match priors (default boxes) and ground truth boxes
-        loc_t = torch.Tensor(num, num_priors, 4)
-        conf_t = torch.LongTensor(num, num_priors)
-        for idx in range(num):
+        loc_t = torch.Tensor(num_batches, num_priors, 4)
+        conf_t = torch.LongTensor(num_batches, num_priors)
+        for idx in range(num_batches):
             truths = targets[idx][:, :-1].data
             labels = targets[idx][:, -1].data
             defaults = priors.data
@@ -75,7 +76,10 @@ class MultiBoxLoss(nn.Module):
         if self.use_gpu:
             loc_t = loc_t.cuda()
             conf_t = conf_t.cuda()
+        
         # wrap targets
+        # loc_t: [num_priors,4] encoded offsets to learn
+        # conf_t: [num_priors] top class label for each prior
         loc_t = Variable(loc_t, requires_grad=False)
         conf_t = Variable(conf_t, requires_grad=False)
 
@@ -95,7 +99,7 @@ class MultiBoxLoss(nn.Module):
 
         # Hard Negative Mining
         # DEBUG: loss_c[pos] = 0  # filter out pos boxes for now
-        loss_c = loss_c.view(num, -1)
+        loss_c = loss_c.view(num_batches, -1)
         loss_c[pos] = 0  # filter out pos boxes for now
         
         _, loss_idx = loss_c.sort(1, descending=True)

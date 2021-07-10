@@ -95,11 +95,15 @@ def train(continue_flag):
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
+    
 
+    # build_ssd => SSD => using self.vgg to build network
+    # min_dim == 300
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
 
     if args.cuda and torch.cuda.is_available():
+        # speed up using multiple GPUs
         net = torch.nn.DataParallel(ssd_net)
         cudnn.benchmark = True
 
