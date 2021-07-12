@@ -7,6 +7,8 @@ from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
+
 import sys
 import time
 import torch
@@ -23,7 +25,6 @@ import visdom
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
-os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
 
 PATH_TO_WEIGHTS = 'weights/COCO_1000.pth'
 
@@ -153,8 +154,10 @@ def train(continue_flag):
         # This will give a rank-1 approximation of the IM. If a better approximation is desired, use more samples from the model output distribution.
         
         diag = BlockDiagonal(net)
+        diag = nn.DataParallel(diag)
         batch_iterator = iter(data_loader)
         criterion = nn.CrossEntropyLoss()
+        criterion = nn.DataParallel(criterion)
 
         for iteration in range(args.start_iter, cfg['max_iter']):
             
@@ -169,7 +172,7 @@ def train(continue_flag):
                     label = dist.sample()
                     loss = criterion(logit, label)
                     optimizer.zero_grad()
-                    loss.backward(retain_graph=True)
+                    loss.sum().backward(retain_graph=True)
                     diag.update(batch_size=images.size(0))
 
         # compute KFAC Fisher Information Matrix
