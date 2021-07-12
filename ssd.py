@@ -122,6 +122,43 @@ class SSD(nn.Module):
         else:
             print('Sorry only .pth and .pkl files supported.')
 
+    def conf_softmax(self,x):
+        sources = list()
+        loc = list()
+        conf = list()
+
+        # apply vgg up to conv4_3 relu
+        for k in range(23):
+            x = self.vgg[k](x)
+
+        s = self.L2Norm(x)
+        sources.append(s)
+
+        # apply vgg up to fc7
+        for k in range(23, len(self.vgg)):
+            x = self.vgg[k](x)
+        sources.append(x)
+
+        # apply extra layers and cache source layer outputs
+        for k, v in enumerate(self.extras):
+            x = F.relu(v(x), inplace=True)
+            if k % 2 == 1:
+                sources.append(x)
+
+        # apply multibox head to source layers
+        for (x, l, c) in zip(sources, self.loc, self.conf):
+            loc.append(l(x).permute(0, 2, 3, 1).contiguous())
+            conf.append(c(x).permute(0, 2, 3, 1).contiguous())
+
+        loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
+        conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
+        output = self.detect.detect_softmax(
+                loc.view(loc.size(0), -1, 4),                   # loc preds
+                self.softmax(conf.view(conf.size(0), -1,
+                             self.num_classes)),                # conf preds
+                self.priors.type(type(x.data))                  # default boxes
+            )
+        return output
 
 # This function is derived from torchvision VGG make_layers()
 # https://github.com/pytorch/vision/blob/master/torchvision/models/vgg.py

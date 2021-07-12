@@ -23,7 +23,7 @@ import visdom
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
-
+os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
 
 PATH_TO_WEIGHTS = 'weights/COCO_1000.pth'
 
@@ -130,6 +130,8 @@ def train(continue_flag):
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
 
+
+    # ------------------------------------------------------------------------
     def bnn_wrapper():
         # assuming the default voc database
         net = build_ssd('test', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
@@ -152,21 +154,23 @@ def train(continue_flag):
         
         diag = BlockDiagonal(net)
         batch_iterator = iter(data_loader)
+        criterion = nn.CrossEntropyLoss()
 
         for iteration in range(args.start_iter, cfg['max_iter']):
             
             images, labels = next(batch_iterator)
             images = Variable(images.cuda())
             labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
-            logits = net(images)
-            dist = torch.distributions.Categorical(logits=logits)
-            # A rank-10 diagonal FiM approximation.
-            for sample in range(10):
-                labels = dist.sample()
-                loss = criterion(logits, labels)
-                optimizer.zero_grad()
-                loss.backward(retain_graph=True)
-                diag.update(batch_size=images.size(0))
+            logits = net.conf_softmax(images)
+            for logit in logits:
+                dist = torch.distributions.Categorical(logits=logit)
+                # A rank-10 diagonal FiM approximation.
+                for sample in range(10):
+                    label = dist.sample()
+                    loss = criterion(logit, label)
+                    optimizer.zero_grad()
+                    loss.backward(retain_graph=True)
+                    diag.update(batch_size=images.size(0))
 
         # compute KFAC Fisher Information Matrix
         kfac = KFAC(net)
