@@ -7,7 +7,9 @@ from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3,4,5,6,7'
+DEVICE = torch.device('cuda:7')
+DEVICE_LIST = [0,1,2,3,4,5,6,7]
 
 import sys
 import time
@@ -105,7 +107,7 @@ def train(continue_flag):
 
     if args.cuda and torch.cuda.is_available():
         # speed up using multiple GPUs
-        net = torch.nn.DataParallel(ssd_net)
+        net = torch.nn.DataParallel(ssd_net,device_ids=[0,1,2,3,4,5,6,7])
         cudnn.benchmark = True
 
     if args.resume:
@@ -118,6 +120,8 @@ def train(continue_flag):
 
     if args.cuda and torch.cuda.is_available():
         net = net.cuda()
+        # net = nn.DataParallel(net)
+        # net.to(device)
 
     if not args.resume:
         print('Initializing weights...')
@@ -131,6 +135,8 @@ def train(continue_flag):
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
 
+    torch.cuda.empty_cache()
+
 
     # ------------------------------------------------------------------------
     def bnn_wrapper():
@@ -140,70 +146,80 @@ def train(continue_flag):
         net.cuda()
         optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                 weight_decay=args.weight_decay)
-        data_loader = data.DataLoader(dataset, args.batch_size,
+        data_loader = data.DataLoader(dataset, 1,
                         num_workers=args.num_workers,
                         shuffle=True, collate_fn=detection_collate,
                         pin_memory=True)
 
-        # get BLOCK DIAGONAL INFORMATION MATRIX
-        # Now we can compute the simplest curvature approximation: The diagonal Fisher information matrix (IM). 
-        # This is done in a very similar way to a standard PyTorch training loop, 
-        # except that we sample our labels from the output distribution of the trained model to obtain the IM 
-        # instead of the 'empirical' IM which uses labels from the data distribution and replace the optimizer by the update of our curvature estimator.
+        # # get BLOCK DIAGONAL INFORMATION MATRIX
+        # # Now we can compute the simplest curvature approximation: The diagonal Fisher information matrix (IM). 
+        # # This is done in a very similar way to a standard PyTorch training loop, 
+        # # except that we sample our labels from the output distribution of the trained model to obtain the IM 
+        # # instead of the 'empirical' IM which uses labels from the data distribution and replace the optimizer by the update of our curvature estimator.
 
-        # This will give a rank-1 approximation of the IM. If a better approximation is desired, use more samples from the model output distribution.
+        # # This will give a rank-1 approximation of the IM. If a better approximation is desired, use more samples from the model output distribution.
         
-        diag = BlockDiagonal(net)
-        diag = nn.DataParallel(diag)
+        # diag = BlockDiagonal(net)
+        # diag = nn.DataParallel(diag,device_ids=DEVICE_LIST)
+        # diag.to('cpu')
         batch_iterator = iter(data_loader)
         criterion = nn.CrossEntropyLoss()
-        criterion = nn.DataParallel(criterion)
+        # criterion = nn.DataParallel(criterion)
 
-        for iteration in range(args.start_iter, cfg['max_iter']):
+        # for iteration in range(args.start_iter, 10):
             
-            images, labels = next(batch_iterator)
-            images = Variable(images.cuda())
-            labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
-            logits = net.conf_softmax(images)
-            for logit in logits:
-                dist = torch.distributions.Categorical(logits=logit)
-                # A rank-10 diagonal FiM approximation.
-                for sample in range(10):
-                    label = dist.sample()
-                    loss = criterion(logit, label)
-                    optimizer.zero_grad()
-                    loss.sum().backward(retain_graph=True)
-                    diag.update(batch_size=images.size(0))
+        #     images, labels = next(batch_iterator)
+        #     images = Variable(images.cuda())
+        #     labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
+        #     logits = net.conf_softmax(images)
+
+        #     torch.cuda.empty_cache()
+
+        #     for logit in logits:
+        #         dist = torch.distributions.Categorical(logits=logit)
+        #         # A rank-10 diagonal FiM approximation.
+        #         for sample in range(10):
+        #             label = dist.sample()
+        #             loss = criterion(logit, label)
+        #             optimizer.zero_grad()
+        #             loss.sum().backward(retain_graph=True)
+        #             diag.module.update(batch_size=images.size(0))
+
 
         # compute KFAC Fisher Information Matrix
         kfac = KFAC(net)
+        # kfac = nn.DataParallel(kfac)
 
-        for iteration in range(args.start_iter, cfg['max_iter']):
+        for iteration in range(args.start_iter, 10):
 
             images, labels = next(batch_iterator)
             images = Variable(images.cuda())
             labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
 
-            logits = net(images)
-            dist = torch.distributions.Categorical(logits=logits)
-            # A rank-1 Kronecker factored FiM approximation.
-            labels = dist.sample()
-            loss = criterion(logits, labels)
-            optimizer.zero_grad()
-            loss.backward()
-            kfac.update(batch_size=images.size(0))
-
-        # compute the eigenvalue corrected diagonal
-        efb = EFB(net.model, kfac.state)
-        for images, labels in tqdm(data_loader):
-            logits = net(images)
-            dist = torch.distributions.Categorical(logits=logits)
-            for sample in range(10):
+            logits = net.conf_softmax(images)
+            for logit in logits:
+                dist = torch.distributions.Categorical(logits=logit)
+                # A rank-1 Kronecker factored FiM approximation.
                 labels = dist.sample()
-                loss = criterion(logits, labels)
+
+                loss = criterion(logit, labels)
                 optimizer.zero_grad()
                 loss.backward(retain_graph=True)
-                efb.update(batch_size=images.size(0))
+                kfac.update(batch_size=images.size(0))
+
+        # # compute the eigenvalue corrected diagonal
+        # efb = EFB(net.model, kfac.state)
+        # efb = nn.DataParallel(efb)
+
+        # for images, labels in tqdm(data_loader):
+        #     logits = net(images)
+        #     dist = torch.distributions.Categorical(logits=logits)
+        #     for sample in range(10):
+        #         labels = dist.sample()
+        #         loss = criterion(logits, labels)
+        #         optimizer.zero_grad()
+        #         loss.backward(retain_graph=True)
+        #         efb.module.update(batch_size=images.size(0))
 
         # compute the diagonal correction term D
         inf = INF(net.model, diag.state, kfac.state, efb.state)

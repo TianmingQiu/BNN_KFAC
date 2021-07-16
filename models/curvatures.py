@@ -344,6 +344,7 @@ class KFAC(Curvature):
 
                     # 2nd factor: H
                     if module_class == 'Conv2d':
+                        if backward == None: continue
                         backward = backward.data.permute(1, 0, 2, 3).contiguous().view(backward.shape[1], -1)
                     else:
                         backward = backward.data.t()
