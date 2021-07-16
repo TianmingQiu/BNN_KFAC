@@ -151,39 +151,10 @@ def train(continue_flag):
                         shuffle=True, collate_fn=detection_collate,
                         pin_memory=True)
 
-        # # get BLOCK DIAGONAL INFORMATION MATRIX
-        # # Now we can compute the simplest curvature approximation: The diagonal Fisher information matrix (IM). 
-        # # This is done in a very similar way to a standard PyTorch training loop, 
-        # # except that we sample our labels from the output distribution of the trained model to obtain the IM 
-        # # instead of the 'empirical' IM which uses labels from the data distribution and replace the optimizer by the update of our curvature estimator.
-
-        # # This will give a rank-1 approximation of the IM. If a better approximation is desired, use more samples from the model output distribution.
-        
-        # diag = BlockDiagonal(net)
-        # diag = nn.DataParallel(diag,device_ids=DEVICE_LIST)
-        # diag.to('cpu')
         batch_iterator = iter(data_loader)
         criterion = nn.CrossEntropyLoss()
         # criterion = nn.DataParallel(criterion)
 
-        # for iteration in range(args.start_iter, 10):
-            
-        #     images, labels = next(batch_iterator)
-        #     images = Variable(images.cuda())
-        #     labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
-        #     logits = net.conf_softmax(images)
-
-        #     torch.cuda.empty_cache()
-
-        #     for logit in logits:
-        #         dist = torch.distributions.Categorical(logits=logit)
-        #         # A rank-10 diagonal FiM approximation.
-        #         for sample in range(10):
-        #             label = dist.sample()
-        #             loss = criterion(logit, label)
-        #             optimizer.zero_grad()
-        #             loss.sum().backward(retain_graph=True)
-        #             diag.module.update(batch_size=images.size(0))
 
 
         # compute KFAC Fisher Information Matrix
@@ -207,22 +178,9 @@ def train(continue_flag):
                 loss.backward(retain_graph=True)
                 kfac.update(batch_size=images.size(0))
 
-        # # compute the eigenvalue corrected diagonal
-        # efb = EFB(net.model, kfac.state)
-        # efb = nn.DataParallel(efb)
-
-        # for images, labels in tqdm(data_loader):
-        #     logits = net(images)
-        #     dist = torch.distributions.Categorical(logits=logits)
-        #     for sample in range(10):
-        #         labels = dist.sample()
-        #         loss = criterion(logits, labels)
-        #         optimizer.zero_grad()
-        #         loss.backward(retain_graph=True)
-        #         efb.module.update(batch_size=images.size(0))
 
         # compute the diagonal correction term D
-        inf = INF(net.model, diag.state, kfac.state, efb.state)
+        inf = INF(net.model, kfac.state)
         inf.update(rank=100)
 
         # inversion and sampling

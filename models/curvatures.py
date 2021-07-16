@@ -475,22 +475,19 @@ class INF(Curvature):
     """
     def __init__(self,
                  model: Union[Module, Sequential],
-                 diags: Dict[Module, Tensor],
                  factors: Dict[Module, Tensor],
-                 lambdas: Dict[Module, Tensor],
                  layer_types: Union[List[str], str] = None):
         """INF class initializer.
 
         Args:
-            diags: Diagonal FiM or GNN computed by `Diagonal` class.
+            diags: Diagonal FiM or GNN computed by `Diagonal` class. (Deprecated)
             factors: Kronecker-factored FiM or GNN computed by `KFAC` class.
-            lambdas: Eigenvalue corrected diagonal FiM or GNN computed by `EFB` class.
+            lambdas: Eigenvalue corrected diagonal FiM or GNN computed by `EFB` class. (Deprecated)
         """
         super().__init__(model, layer_types)
-        assert diags.keys() == factors.keys() == lambdas.keys()
         self.eigvecs = get_eigenvectors(factors)
-        self.lambdas = lambdas
-        self.diags = diags
+        # self.lambdas = lambdas
+        # self.diags = diags
 
     def update(self,
                rank: int = 100):
@@ -501,16 +498,16 @@ class INF(Curvature):
             rank: The rank of the low-rank approximations.
         """
         values = zip(list(self.diags.keys()),
-                     list(self.eigvecs.values()),
-                     list(self.lambdas.values()),
-                     list(self.diags.values()))
-        for layer, eigvecs, lambdas, diags in tqdm(values, total=len(self.diags)):
-            xxt_eigvecs, ggt_eigvecs = eigvecs
-            lambda_vec = lambdas.t().contiguous().view(-1)
-            diag_vec = diags.t().contiguous().view(-1)
+                     list(self.eigvecs.values()))
 
-            lr_xxt_eigvecs, lr_ggt_eigvecs, lr_lambda = self._dim_reduction(xxt_eigvecs, ggt_eigvecs, lambda_vec, rank)
-            sif_diag = self._diagonal_accumulator(lr_xxt_eigvecs, lr_ggt_eigvecs, lr_lambda)
+        for layer, eigvecs in tqdm(values, total=len(self.diags)):
+            xxt_eigvecs, ggt_eigvecs = eigvecs
+
+            # No lambda vec => No dim reduction
+            # lr_xxt_eigvecs, lr_ggt_eigvecs, lr_lambda = self._dim_reduction(xxt_eigvecs, ggt_eigvecs, lambda_vec, rank)
+            lr_xxt_eigvecs, lr_ggt_eigvecs = xxt_eigvecs, ggt_eigvecs
+
+            sif_diag = self._diagonal_accumulator(lr_xxt_eigvecs, lr_ggt_eigvecs)
 
             self.state[layer] = (lr_xxt_eigvecs, lr_ggt_eigvecs, lr_lambda, diag_vec - sif_diag)
 
@@ -667,11 +664,11 @@ class INF(Curvature):
         """
         n = xxt_eigvecs.shape[0]
         m = ggt_eigvecs.shape[0]
-        diag_vec = torch.zeros(n * m).to(lambda_vec.device)
+        diag_vec = torch.zeros(n * m) # .to(lambda_vec.device)
         k = 0
 
         for i in range(n):
             diag_kron = kron(xxt_eigvecs[i, :].unsqueeze(0), ggt_eigvecs) ** 2
-            diag_vec[k:k + m] = diag_kron @ lambda_vec
+            diag_vec[k:k + m] = diag_kron # @ lambda_vec
             k += m
         return diag_vec
