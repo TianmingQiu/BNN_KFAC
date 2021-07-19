@@ -161,11 +161,12 @@ def train(continue_flag):
         kfac = KFAC(net)
         # kfac = nn.DataParallel(kfac)
 
-        for iteration in range(args.start_iter, 10):
+        for iteration in range(args.start_iter, 1):
 
             images, labels = next(batch_iterator)
             images = Variable(images.cuda())
             labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
+
 
             logits = net.conf_softmax(images)
             for logit in logits:
@@ -180,14 +181,12 @@ def train(continue_flag):
 
 
         # compute the diagonal correction term D
-        inf = INF(net.model, kfac.state)
+        inf = INF(net, kfac.state)
         inf.update(rank=100)
 
         # inversion and sampling
         estimator = inf
-        add = 1e15
-        multiply = 1e20
-        estimator.invert(add, multiply)
+        estimator.invert()
 
         mean_predictions = 0
         samples = 10  # 10 Monte Carlo samples from the weight posterior.
@@ -340,4 +339,4 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
 
 
 if __name__ == '__main__':
-    train(1)
+    train(continue_flag = True)

@@ -1,5 +1,3 @@
-"""Various Fisher information matrix approximations."""
-
 from abc import ABC, abstractmethod
 from typing import Union, List, Any, Dict
 import copy
@@ -16,21 +14,17 @@ from .utilities import get_eigenvectors, kron
 
 class Curvature(ABC):
     """Base class for all src approximations.
-
     All src approximations are computed layer-wise (i.e. layer-wise independence is assumed s.t. no
     covariances between layers are computed, aka block-wise approximation) and stored in `state`.
-
     The src of the loss function is the matrix of 2nd-order derivatives of the loss w.r.t. the networks weights
     (i.e. the expected Hessian). It can be approximated by the expected Fisher information matrix and, under exponential
     family loss functions (like mean-squared error and cross-entropy loss) and piecewise linear activation functions
     (i.e. ReLU), becomes identical to the Fisher.
-
     Note:
         The aforementioned identity does not hold for the empirical Fisher, where the expectation is computed w.r.t.
         the data distribution instead of the models' output distribution. Also, because the latter is usually unknown,
         it is approximated through Monte Carlo integration using samples from a categorical distribution, initialized by
         the models' output.
-
     Source: `Optimizing Neural Networks with Kronecker-factored Approximate Curvature
     <https://arxiv.org/abs/1503.05671>`_
     """
@@ -39,7 +33,6 @@ class Curvature(ABC):
                  model: Union[Module, Sequential],
                  layer_types: Union[List[str], str] = None):
         """Curvature class initializer.
-
         Args:
             model: Any (pre-trained) PyTorch model including all `torchvision` models.
             layer_types: Types of layers for which to compute src information. Supported are `Linear`, `Conv2d`
@@ -69,7 +62,6 @@ class Curvature(ABC):
                  weight: Tensor,
                  bias: Tensor = None):
         """Modifies current model parameters by adding/subtracting quantity given in `sample`.
-
         Args:
             sample: Sampled offset from the mean dictated by the inverse src (variance).
             weight: The weights of one model layer.
@@ -91,11 +83,9 @@ class Curvature(ABC):
                add: Union[float, list, tuple] = 0.,
                multiply: Union[float, list, tuple] = 1.):
         """Abstract method to be implemented by each derived class individually. Inverts state.
-
         Args:
             add: This quantity times the identity is added to each src factor.
             multiply: Each factor is multiplied by this quantity.
-
         Returns:
             A dict of inverted factors and potentially other quantities required for sampling.
         """
@@ -105,10 +95,8 @@ class Curvature(ABC):
     def sample(self,
                layer: Module) -> Tensor:
         """Abstract method to be implemented by each derived class individually. Samples from inverted state.
-
         Args:
             layer: A layer instance from the current model.
-
         Returns:
             A tensor with newly sampled weights for the given layer.
         """
@@ -131,17 +119,14 @@ class Curvature(ABC):
 
 class Diagonal(Curvature):
     r"""The diagonal Fisher information or Generalized Gauss Newton matrix approximation.
-
     It is defined as :math:`F_{DIAG}=\mathrm{diag}(F)` with `F` being the Fisher defined in the `FISHER` class.
     Code inspired by https://github.com/wjmaddox/swa_gaussian/blob/master/swag/posteriors/diag_laplace.py.
-
     Source: `A Scalable Laplace Approximation for Neural Networks <https://openreview.net/pdf?id=Skdvd2xAZ>`_
     """
 
     def update(self,
                batch_size: int):
         """Computes the diagonal src for selected layer types, skipping all others.
-
         Args:
             batch_size: The size of the current batch.
         """
@@ -195,16 +180,13 @@ class Diagonal(Curvature):
 
 class BlockDiagonal(Curvature):
     r"""The block-diagonal Fisher information or Generalized Gauss Newton matrix approximation.
-
     It can be defined as the expectation of the outer product of the gradient of the networks loss E w.r.t. its
     weights W: :math:`F=\mathbb{E}\left[\nabla_W E(W)\nabla_W E(W)^T\right]`
-
     Source: `A Scalable Laplace Approximation for Neural Networks <https://openreview.net/pdf?id=Skdvd2xAZ>`_
     """
     def update(self,
                batch_size: int):
         """Computes the block-diagonal (per-layer) src selected layer types, skipping all others.
-
         Args:
             batch_size: The size of the current batch.
         """
@@ -270,19 +252,15 @@ class BlockDiagonal(Curvature):
 
 class KFAC(Curvature):
     r"""The Kronecker-factored Fisher information matrix approximation.
-
     For a single datum, the Fisher can be Kronecker-factorized into two much smaller matrices `Q` and `H`, aka
     `Kronecker factors`, s.t. :math:`F=Q\otimes H` where :math:`Q=zz^T` and :math:`H=\nabla_a^2 E(W)` with `z` being the
     output vector of the previous layer, `a` the `pre-activation` of the current layer (i.e. the output of the previous
     layer before being passed through the non-linearity) and `E(W)` the loss. For the expected Fisher,
     :math:`\mathbb{E}[Q\otimes H]\approx\mathbb{E}[Q]\otimes\mathbb{E}[H]` is assumed, which might not necessarily be
     the case.
-
     Code adapted from https://github.com/Thrandis/EKFAC-pytorch/kfac.py.
-
     Linear: `Optimizing Neural Networks with Kronecker-factored Approximate Curvature
     <https://arxiv.org/abs/1503.05671>`_
-
     Convolutional: `A Kronecker-factored approximate Fisher matrix for convolutional layers
     <https://arxiv.org/abs/1602.01407>`_
     """
@@ -290,10 +268,8 @@ class KFAC(Curvature):
                  model: Union[Module, Sequential],
                  layer_types: Union[List[str], str] = None):
         """KFAC class initializer.
-
         For the recursive computation of `H`, outputs and inputs for each layer are recorded in `record`. Forward and
         backward hook handles are stored in `hooks` for subsequent removal.
-
         Args:
             model: Any (pre-trained) PyTorch model including all `torchvision` models.
         """
@@ -319,9 +295,7 @@ class KFAC(Curvature):
     def update(self,
                batch_size: int):
         """Computes the 1st and 2nd Kronecker factor `Q` and `H` for each selected layer type, skipping all others.
-
         Todo: Check code against papers.
-
         Args:
             batch_size: The size of the current batch.
         """
@@ -344,8 +318,7 @@ class KFAC(Curvature):
 
                     # 2nd factor: H
                     if module_class == 'Conv2d':
-                        if backward == None: 
-                            continue
+                        if backward == None: continue
                         backward = backward.data.permute(1, 0, 2, 3).contiguous().view(backward.shape[1], -1)
                     else:
                         backward = backward.data.t()
@@ -403,7 +376,6 @@ class KFAC(Curvature):
 
 class EFB(Curvature):
     """The eigenvalue corrected Kronecker-factored Fisher information or Generalized Gauss Newton matrix.
-
     Todo: Add source/equations.
     """
     def __init__(self,
@@ -411,7 +383,6 @@ class EFB(Curvature):
                  factors: Dict[Module, Tensor],
                  layer_types: Union[List[str], str] = None):
         """EFB class initializer.
-
         Args:
             model: Any (pre-trained) PyTorch model including all `torchvision` models.
             factors: The Kronecker factors Q and H, computed using the `KFAC` class.
@@ -423,7 +394,6 @@ class EFB(Curvature):
     def update(self,
                batch_size: int):
         """Computes the eigenvalue corrected diagonal of the FiM or GNN.
-
         Args:
             batch_size: The size of the current batch.
         """
@@ -471,107 +441,84 @@ class EFB(Curvature):
 
 class INF(Curvature):
     """Computes the diagonal correction term and low-rank approximations of KFAC factor eigenvectors and EFB diagonals.
-
     Todo: Add more info from paper.
     """
     def __init__(self,
                  model: Union[Module, Sequential],
+                 diags: Dict[Module, Tensor],
                  factors: Dict[Module, Tensor],
+                 lambdas: Dict[Module, Tensor],
                  layer_types: Union[List[str], str] = None):
         """INF class initializer.
-
         Args:
-            diags: Diagonal FiM or GNN computed by `Diagonal` class. (Deprecated)
+            diags: Diagonal FiM or GNN computed by `Diagonal` class.
             factors: Kronecker-factored FiM or GNN computed by `KFAC` class.
-            lambdas: Eigenvalue corrected diagonal FiM or GNN computed by `EFB` class. (Deprecated)
+            lambdas: Eigenvalue corrected diagonal FiM or GNN computed by `EFB` class.
         """
         super().__init__(model, layer_types)
+        assert diags.keys() == factors.keys() == lambdas.keys()
         self.eigvecs = get_eigenvectors(factors)
-        self.lambdas = None
-        self.diags = None
+        self.lambdas = lambdas
+        self.diags = diags
 
     def update(self,
                rank: int = 100):
         """Accumulates the diagonal values used for the diagonal correction term.
-
         Todo: Add more info from paper.
         Args:
             rank: The rank of the low-rank approximations.
         """
-        values = zip(list(self.eigvecs.keys()),
-                     list(self.eigvecs.values()))
-
-        for layer, eigvecs in tqdm(values, total=len(self.eigvecs)):
+        values = zip(list(self.diags.keys()),
+                     list(self.eigvecs.values()),
+                     list(self.lambdas.values()),
+                     list(self.diags.values()))
+        for layer, eigvecs, lambdas, diags in tqdm(values, total=len(self.diags)):
             xxt_eigvecs, ggt_eigvecs = eigvecs
+            lambda_vec = lambdas.t().contiguous().view(-1)
+            diag_vec = diags.t().contiguous().view(-1)
 
-            # No lambda vec => No dim reduction
-            # lr_xxt_eigvecs, lr_ggt_eigvecs, lr_lambda = self._dim_reduction(xxt_eigvecs, ggt_eigvecs, lambda_vec, rank)
-            
-            lr_xxt_eigvecs, lr_ggt_eigvecs = xxt_eigvecs, ggt_eigvecs
+            lr_xxt_eigvecs, lr_ggt_eigvecs, lr_lambda = self._dim_reduction(xxt_eigvecs, ggt_eigvecs, lambda_vec, rank)
+            sif_diag = self._diagonal_accumulator(lr_xxt_eigvecs, lr_ggt_eigvecs, lr_lambda)
 
-            # sif_diag = self._diagonal_accumulator(lr_xxt_eigvecs, lr_ggt_eigvecs)
+            self.state[layer] = (lr_xxt_eigvecs, lr_ggt_eigvecs, lr_lambda, diag_vec - sif_diag)
 
-            self.state[layer] = (lr_xxt_eigvecs, lr_ggt_eigvecs) # , sif_diag)
-
-    def invert(self):
+    def invert(self,
+               add: Union[float, list, tuple] = 0.,
+               multiply: Union[float, list, tuple] = 1.):
+        assert self.state, "State dict is empty. Did you call 'update' prior to this?"
         if self.inv_state:
             Warning("State has already been inverted. Is this expected?")
         for index, (layer, value) in enumerate(self.state.items()):
-            # Low-rank U_A, low-rank U_G, D
-            lr_frst_eigvecs, lr_scnd_eigvecs = value
-            # pre_sample = self.pre_sampler(lr_frst_eigvecs, lr_scnd_eigvecs)
-            self.inv_state[layer] = (lr_frst_eigvecs, lr_scnd_eigvecs)
-
+            if not isinstance(add, float) and not isinstance(multiply, float):
+                assert len(add) == len(multiply) == len(self.state)
+                n, s = add[index], multiply[index]
+            else:
+                n, s = add, multiply
+            # Low-rank U_A, low-rank U_G, low-rank Lambda, D
+            lr_frst_eigvecs, lr_scnd_eigvecs, lr_lambda, correction = value
+            correction[correction < 0] = 0
+            reg_lr_lambda = (s * lr_lambda).sqrt()
+            reg_inv_correction = torch.reciprocal(s * correction + n).sqrt()
+            pre_sample = self.pre_sampler(lr_frst_eigvecs, lr_scnd_eigvecs, reg_lr_lambda, reg_inv_correction)
+            self.inv_state[layer] = (lr_frst_eigvecs, lr_scnd_eigvecs, reg_inv_correction, pre_sample)
 
     def sample(self,
                layer: Module) -> Tensor:
         assert self.inv_state, "Inverse state dict is empty. Did you call 'invert' prior to this?"
-        a, b = self.inv_state[layer]
-        return self.sampler(a, b).reshape(a.shape[0], b.shape[0]).t()
+        a, b, c, d = self.inv_state[layer]
+        return self.sampler(a, b, c, d).reshape(a.shape[0], b.shape[0]).t()
 
     @staticmethod
     def pre_sampler(frst_eigvecs: torch.Tensor,
-                    scnd_eigvecs: torch.Tensor,) -> torch.Tensor:
-        """Pre-sampler for INF sampling. Only needs to be called once.
-
-        Args:
-            frst_eigvecs: Eigenvectors of first KFAC factor.
-            scnd_eigvecs: Eigenvectors of second KFAC factor.
-            reg_lambda: Regularized, eigenvalue corrected diagonal FIM (computed by EFB)
-            reg_inv_correction: Regularized inverse of the diagonal correction term of INF.
-
-        Returns:
-            A pre-sample used in `sampler` to sample weight sets.
-        """
-        try:
-            V_s = kron(frst_eigvecs, scnd_eigvecs)
-        except RuntimeError:
-            print("GPU capacity exhausted. Pre-sampling on CPU.")
-            frst_eigvecs = frst_eigvecs.cpu()
-            scnd_eigvecs = scnd_eigvecs.cpu()
-            V_s = kron(frst_eigvecs, scnd_eigvecs)
-        vtv = V_s.t() @ V_s
-        vtv = (vtv + vtv.t()) / 2.
-        A_c_inv = vtv.cholesky().inverse()
-        L_c = vtv
-        P_c = L_c
-
-        return P_c
-
-
-    @staticmethod
-    def pre_sampler_(frst_eigvecs: torch.Tensor,
                     scnd_eigvecs: torch.Tensor,
                     reg_lambda: torch.Tensor,
                     reg_inv_correction: torch.Tensor) -> torch.Tensor:
         """Pre-sampler for INF sampling. Only needs to be called once.
-
         Args:
             frst_eigvecs: Eigenvectors of first KFAC factor.
             scnd_eigvecs: Eigenvectors of second KFAC factor.
             reg_lambda: Regularized, eigenvalue corrected diagonal FIM (computed by EFB)
             reg_inv_correction: Regularized inverse of the diagonal correction term of INF.
-
         Returns:
             A pre-sample used in `sampler` to sample weight sets.
         """
@@ -598,29 +545,26 @@ class INF(Curvature):
     @staticmethod
     def sampler(frst_eigvecs: Tensor,
                 scnd_eigvecs: Tensor,
-                # reg_inv_correction: Tensor,
-                # pre_sample: Tensor
-                ) -> Tensor:
+                reg_inv_correction: Tensor,
+                pre_sample: Tensor) -> Tensor:
         """Samples a new set of weights from the INF weight posterior distribution for the current layer.
-
         Args:
             frst_eigvecs: Eigenvectors of first KFAC factor.
             scnd_eigvecs: Eigenvectors of second KFAC factor.
             reg_inv_correction: Regularized inverse of the diagonal correction term of INF.
             pre_sample: Pre-sample computed by the pre-sampler.
-
         Returns:
             A new set of weights for the current layer.
         """
         X = torch.randn(frst_eigvecs.shape[0] * scnd_eigvecs.shape[0], device=frst_eigvecs.device,
                         dtype=frst_eigvecs.dtype)
-        Y_l = X
+        Y_l = reg_inv_correction * X
         unvec_Y_l = Y_l.t().reshape((scnd_eigvecs.shape[0], frst_eigvecs.shape[0]))
         Xq = scnd_eigvecs.t() @ unvec_Y_l @ frst_eigvecs
-        Qx = Xq.t().contiguous().view(-1)
+        Qx = pre_sample @ Xq.t().contiguous().view(-1)
         unvec_Qx = Qx.t().reshape((scnd_eigvecs.shape[1], frst_eigvecs.shape[1]))
         X_p_s = scnd_eigvecs @ unvec_Qx @ frst_eigvecs.t()
-        Y_r = X_p_s.t().contiguous().view(-1)
+        Y_r = reg_inv_correction ** 2 * X_p_s.t().contiguous().view(-1)
 
         return Y_l.t() - Y_r.t()
 
@@ -630,15 +574,12 @@ class INF(Curvature):
                        lambda_vec: Tensor,
                        rank: int):
         """
-
         Args:
             frst_eigvecs:
             scnd_eigvecs:
             lambda_vec:
             rank:
-
         Returns:
-
         """
         if rank >= lambda_vec.shape[0]:
             return frst_eigvecs, scnd_eigvecs, lambda_vec
@@ -673,24 +614,22 @@ class INF(Curvature):
 
     @staticmethod
     def _diagonal_accumulator(xxt_eigvecs: Tensor,
-                              ggt_eigvecs: Tensor,):
+                              ggt_eigvecs: Tensor,
+                              lambda_vec: Tensor):
         """
-
         Args:
             xxt_eigvecs:
             ggt_eigvecs:
             lambda_vec:
-
         Returns:
-
         """
         n = xxt_eigvecs.shape[0]
         m = ggt_eigvecs.shape[0]
-        diag_vec = torch.zeros(n * m) # .to(lambda_vec.device)
+        diag_vec = torch.zeros(n * m).to(lambda_vec.device)
         k = 0
 
         for i in range(n):
             diag_kron = kron(xxt_eigvecs[i, :].unsqueeze(0), ggt_eigvecs) ** 2
-            diag_vec[k:k + m] = diag_kron # @ lambda_vec
+            diag_vec[k:k + m] = diag_kron @ lambda_vec
             k += m
         return diag_vec
