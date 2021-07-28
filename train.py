@@ -152,32 +152,29 @@ def train(continue_flag):
                         pin_memory=True)
 
         batch_iterator = iter(data_loader)
-        criterion = nn.CrossEntropyLoss()
-        # criterion = nn.DataParallel(criterion)
-
+        criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
+                                False, args.cuda)
 
 
         # compute KFAC Fisher Information Matrix
         kfac = KFAC(net)
         # kfac = nn.DataParallel(kfac)
 
-        for iteration in range(args.start_iter, 1):
+        # TODO: Redesign max iteration
+        for iteration in range(args.start_iter, 10):
 
             images, labels = next(batch_iterator)
             images = Variable(images.cuda())
             labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
 
+            out = net(images)
+            optimizer.zero_grad()
+            loss_l, loss_c = criterion(out, targets)
+            loss = loss_l + loss_c
+            loss.backward()
+            optimizer.step()
 
-            logits = net.conf_softmax(images)
-            for logit in logits:
-                dist = torch.distributions.Categorical(logits=logit)
-                # A rank-1 Kronecker factored FiM approximation.
-                labels = dist.sample()
-
-                loss = criterion(logit, labels)
-                optimizer.zero_grad()
-                loss.backward(retain_graph=True)
-                kfac.update(batch_size=images.size(0))
+            kfac.update(batch_size=images.size(0))
 
 
         # compute the diagonal correction term D
