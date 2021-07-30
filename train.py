@@ -141,7 +141,7 @@ def train(continue_flag):
     # ------------------------------------------------------------------------
     def bnn_wrapper():
         # assuming the default voc database
-        net = build_ssd('test', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
+        net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
         net.load_state_dict(torch.load(args.resume))
         net.cuda()
         optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
@@ -163,9 +163,9 @@ def train(continue_flag):
         # TODO: Redesign max iteration
         for iteration in range(args.start_iter, 10):
 
-            images, labels = next(batch_iterator)
+            images, targets = next(batch_iterator)
             images = Variable(images.cuda())
-            labels = [Variable(ann.cuda(), volatile=True) for ann in labels]
+            targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
 
             out = net(images)
             optimizer.zero_grad()
