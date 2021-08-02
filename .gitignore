@@ -5,6 +5,7 @@ venv_bnn_kfac/
 data/*
 !data/coco.py
 !data/voc0712.py
+!data/kitti.py
 !data/scripts
 !data/config.py
 

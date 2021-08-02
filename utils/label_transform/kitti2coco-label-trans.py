@@ -10,12 +10,20 @@ from pathlib import Path
 
 PATH = Path(__file__).parent
 
-kitti_img_path   = (PATH / 'kitti/images').resolve()
-kitti_label_path = (PATH / 'kitti/lables').resolve()
+# kitti_img_path   = (PATH / 'kitti/images').resolve()
+# kitti_label_path = (PATH / 'kitti/lables').resolve()
+
+
+# #transformed lables to save path
+# kitti_label_tosave_path = str((PATH / 'kitti/labels2coco').resolve()) + '/'
+
+kitti_img_path   = '/root/Documents/BNN_KFAC/data/kitti/training/image_2/'
+kitti_label_path = '/root/Documents/BNN_KFAC/data/kitti/training/label_2/'
 
 
 #transformed lables to save path
-kitti_label_tosave_path = str((PATH / 'kitti/labels2coco').resolve()) + '/'
+kitti_label_tosave_path = '/root/Documents/BNN_KFAC/data/kitti/'
+
 
 #the absolute ptah of your data set
 #kitti_data_real_path = '/home/pakcy/Desktop/PyTorch-YOLOv3/data/kitti/images/train/'

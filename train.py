@@ -1,3 +1,4 @@
+from data.kitti import KittiDetection
 from models.utilities import calibration_curve
 from numpy.core.fromnumeric import diagonal
 from tqdm.std import tqdm
@@ -28,12 +29,12 @@ import visdom
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-PATH_TO_WEIGHTS = 'weights/COCO_1000.pth'
+PATH_TO_WEIGHTS = None #'weights/COCO_1000.pth'
 
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='COCO', choices=['VOC', 'COCO'],
+parser.add_argument('--dataset', default='KITTI', choices=['VOC', 'COCO', 'KITTI'],
                     type=str, help='VOC or COCO')
 parser.add_argument('--dataset_root', default=COCO_ROOT, # osp.join('data/coco/') OR osp.join("data/VOCdevkit/")
                     help='Dataset root directory path')
@@ -98,6 +99,14 @@ def train(continue_flag):
         dataset = VOCDetection(root=args.dataset_root,
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
+
+
+    elif args.dataset == 'KITTI':
+        # if args.dataset_root == COCO_ROOT:
+        #     parser.error('Must specify dataset if specifying dataset_root')
+
+        cfg = kitti_config
+        dataset = KittiDetection(root='data/kitti/train.txt')
     
 
     # build_ssd => SSD => using self.vgg to build network
@@ -230,7 +239,7 @@ def train(continue_flag):
                                   pin_memory=True)
     # create batch iterator
     batch_iterator = iter(data_loader)
-    for iteration in range(args.start_iter, cfg['max_iter']):
+    for iteration in range(args.start_iter, min(100,cfg['max_iter'])):
         if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
             update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
                             'append', epoch_size)
@@ -278,7 +287,7 @@ def train(continue_flag):
 
         if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
+            torch.save(ssd_net.state_dict(), 'weights/ssd300_kitti_' +
                        repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(),
                args.save_folder + '' + args.dataset + '_' + cfg.max_iter + '.pth')
@@ -336,4 +345,4 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
 
 
 if __name__ == '__main__':
-    train(continue_flag = True)
+    train(continue_flag = False)
