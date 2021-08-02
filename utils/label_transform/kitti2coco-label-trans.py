@@ -2,17 +2,20 @@ import numpy as np
 import cv2
 import os
 import sys
+from pathlib import Path
 
 #set your data_set absolute path
 #as for me, for example 
 # test example
-kitti_img_path ='/home/pakcy/Desktop/PyTorch-YOLOv3-kitti/label_transform/kitti/images/'
-kitti_label_path = '/home/pakcy/Desktop/PyTorch-YOLOv3-kitti/label_transform/kitti/lables/'
 
+PATH = Path(__file__).parent
+
+kitti_img_path   = (PATH / 'kitti/images').resolve()
+kitti_label_path = (PATH / 'kitti/lables').resolve()
 
 
 #transformed lables to save path
-kitti_label_tosave_path = 'kitti/labels2coco/'
+kitti_label_tosave_path = str((PATH / 'kitti/labels2coco').resolve()) + '/'
 
 #the absolute ptah of your data set
 #kitti_data_real_path = '/home/pakcy/Desktop/PyTorch-YOLOv3/data/kitti/images/train/'
@@ -20,7 +23,8 @@ kitti_label_tosave_path = 'kitti/labels2coco/'
 index = 0
 cvfont = cv2.FONT_HERSHEY_SIMPLEX
 
-kitti_names = open('kitti.names','r')
+kitti_path = (PATH / 'kitti.names').resolve()
+kitti_names = open(kitti_path,'r')
 kitti_names_contents = kitti_names.readlines()                
 kitti_images = os.listdir(kitti_img_path)
 kitti_labels = os.listdir(kitti_label_path)
@@ -37,15 +41,15 @@ kitti_names_num = dict(zip(kitti_names_dic_key,values))
 #print(kitti_names_num)
 
 #创建训练集图片的List
-f = open('train.txt','w')
+f = open((PATH / 'train.txt').resolve(),'w')
 for img in kitti_images:
-    f.write(kitti_img_path+img+'\n')
+    f.write(str(kitti_img_path)+img+'\n')
 f.close()
 
 #kitti数据集 相对坐标 转换为绝对坐标
 for indexi in range(len(kitti_images)):
-    kitti_img_totest_path = kitti_img_path + kitti_images[indexi]
-    kitti_label_totest_path = kitti_label_path + kitti_labels[indexi]
+    kitti_img_totest_path = str(kitti_img_path) + '/' + kitti_images[indexi]
+    kitti_label_totest_path = str(kitti_label_path) + '/' + kitti_labels[indexi]
     #print(kitti_label_totest_path,kitti_img_totest_path)
     
     kitti_img_totest = cv2.imread(kitti_img_totest_path)
