@@ -18,7 +18,7 @@ import sys
 
 
 class KittiDetection(Dataset):
-    def __init__(self, root, img_size=416):
+    def __init__(self, root, img_size=300):
         with open(root, 'r') as file:
             self.img_files = file.readlines()
         self.label_files = [path.replace('images', 'labels').replace('.png', '.txt').replace('.jpg', '.txt') for path in self.img_files]
@@ -76,11 +76,20 @@ class KittiDetection(Dataset):
             y1 += pad[0][0]
             x2 += pad[1][0]
             y2 += pad[0][0]
+
+            # ORIGIN:
+            # # Calculate ratios from coordinates
+            # labels[:, 1] = ((x1 + x2) / 2) / padded_w
+            # labels[:, 2] = ((y1 + y2) / 2) / padded_h
+            # labels[:, 3] *= w / padded_w
+            # labels[:, 4] *= h / padded_h
+
+            # CURRENT:
             # Calculate ratios from coordinates
-            labels[:, 1] = ((x1 + x2) / 2) / padded_w
-            labels[:, 2] = ((y1 + y2) / 2) / padded_h
-            labels[:, 3] *= w / padded_w
-            labels[:, 4] *= h / padded_h
+            labels[:, 1] = x1 / padded_w
+            labels[:, 2] = y1 / padded_h
+            labels[:, 3] = x2 / padded_w
+            labels[:, 4] = y2 / padded_h
         # Fill matrix
         filled_labels = np.zeros((self.max_objects, 5))
         if labels is not None:
