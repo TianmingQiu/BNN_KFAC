@@ -15,6 +15,21 @@ import matplotlib.patches as patches
 from skimage.transform import resize
 
 import sys
+import os.path as osp
+import cv2
+
+
+KITTI_CLASSES = (  # always index 0
+'Car',
+'Van',
+'Truck',
+'Pedestrian',
+'Person_sitting',
+'Cyclist',
+'Tram',
+'Misc')
+
+KITTI_ROOT = osp.join("data/kitti")
 
 
 class KittiDetection(Dataset):
@@ -102,6 +117,15 @@ class KittiDetection(Dataset):
         # CURRENT: [xmin,xmax,ymin,ymax,idx]    e.g. [0.47359375000000004, 0.42920833333333336, 0.82246875, 0.6674166666666667, 59]
         # return img_path, input_img, filled_labels
         return input_img, [np.append(a[1:],a[0]) for a in labels], img_path
+
+    def pull_image(self, index):
+        img_name = self.img_files[index].rstrip()
+        return cv2.imread(img_name, cv2.IMREAD_COLOR)
+
+    def pull_anno(self, index):
+        label_path = self.label_files[index % len(self.img_files)].rstrip()
+        labels = np.loadtxt(label_path).reshape(-1, 5)
+        return label_path, labels
 
 
     def __len__(self):
