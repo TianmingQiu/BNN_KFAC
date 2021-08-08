@@ -10,7 +10,8 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, BaseTransform
-from data import VOC_CLASSES as labelmap
+from data import VOC_CLASSES
+from data import KittiDetection, KITTI_CLASSES as labelmap, KITTI_ROOT
 import torch.utils.data as data
 
 from ssd import build_ssd
@@ -36,7 +37,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Evaluation')
 parser.add_argument('--trained_model',
-                    default='weights/ssd300_mAP_77.43_v2.pth', type=str,
+                    default='weights/KITTI_1000.pth', type=str,
                     help='Trained state_dict file path to open')
 parser.add_argument('--save_folder', default='eval/', type=str,
                     help='File path to save results')
@@ -425,10 +426,14 @@ if __name__ == '__main__':
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
+
+    # dataset = VOCDetection(args.voc_root, [('2007', set_type)],
+    #                        BaseTransform(300, dataset_mean),
+    #                        VOCAnnotationTransform())
+
     # load data
-    dataset = VOCDetection(args.voc_root, [('2007', set_type)],
-                           BaseTransform(300, dataset_mean),
-                           VOCAnnotationTransform())
+    dataset = KittiDetection(root='data/kitti/train.txt')
+
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True

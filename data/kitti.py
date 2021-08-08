@@ -42,7 +42,21 @@ class KittiDetection(Dataset):
         self.name = 'kitti'
 
     def __getitem__(self, index):
+        im, gt, h, w = self.pull_item(index)
+        return im, gt
 
+
+    def pull_image(self, index):
+        img_name = self.img_files[index].rstrip()
+        return cv2.imread(img_name, cv2.IMREAD_COLOR)
+
+    def pull_anno(self, index):
+        label_path = self.label_files[index % len(self.img_files)].rstrip()
+        labels = np.loadtxt(label_path).reshape(-1, 5)
+        return label_path, labels
+
+
+    def pull_item(self, index):
         #---------
         #  Image
         #---------
@@ -116,16 +130,7 @@ class KittiDetection(Dataset):
         # ORIGIN:  [idx,x1+x2,y1+y2,w,h]        e.g. [7.        , 0.39713135, 0.50079371, 0.06983078, 0.06423046]
         # CURRENT: [xmin,xmax,ymin,ymax,idx]    e.g. [0.47359375000000004, 0.42920833333333336, 0.82246875, 0.6674166666666667, 59]
         # return img_path, input_img, filled_labels
-        return input_img, [np.append(a[1:],a[0]) for a in labels], img_path
-
-    def pull_image(self, index):
-        img_name = self.img_files[index].rstrip()
-        return cv2.imread(img_name, cv2.IMREAD_COLOR)
-
-    def pull_anno(self, index):
-        label_path = self.label_files[index % len(self.img_files)].rstrip()
-        labels = np.loadtxt(label_path).reshape(-1, 5)
-        return label_path, labels
+        return input_img, [np.append(a[1:],a[0]) for a in labels], h, w
 
 
     def __len__(self):
