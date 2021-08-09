@@ -239,23 +239,23 @@ def voc_eval(detpath,
                            classname,
                            [ovthresh],
                            [use_07_metric])
-Top level function that does the PASCAL VOC evaluation.
-detpath: Path to detections
-   detpath.format(classname) should produce the detection results file.
-annopath: Path to annotations
-   annopath.format(imagename) should be the xml annotations file.
-imagesetfile: Text file containing the list of images, one image per line.
-classname: Category name (duh)
-cachedir: Directory for caching the annotations
-[ovthresh]: Overlap threshold (default = 0.5)
-[use_07_metric]: Whether to use VOC07's 11 point AP computation
-   (default True)
-"""
-# assumes detections are in detpath.format(classname)
-# assumes annotations are in annopath.format(imagename)
-# assumes imagesetfile is a text file with each line an image name
-# cachedir caches the annotations in a pickle file
-# first load gt
+    Top level function that does the PASCAL VOC evaluation.
+    detpath: Path to detections
+    detpath.format(classname) should produce the detection results file.
+    annopath: Path to annotations
+    annopath.format(imagename) should be the xml annotations file.
+    imagesetfile: Text file containing the list of images, one image per line.
+    classname: Category name (duh)
+    cachedir: Directory for caching the annotations
+    [ovthresh]: Overlap threshold (default = 0.5)
+    [use_07_metric]: Whether to use VOC07's 11 point AP computation
+    (default True)
+    """
+    # assumes detections are in detpath.format(classname)
+    # assumes annotations are in annopath.format(imagename)
+    # assumes imagesetfile is a text file with each line an image name
+    # cachedir caches the annotations in a pickle file
+    # first load gt
     if not os.path.isdir(cachedir):
         os.mkdir(cachedir)
     cachefile = os.path.join(cachedir, 'annots.pkl')

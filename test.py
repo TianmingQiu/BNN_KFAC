@@ -132,7 +132,7 @@ def test_coco():
 def test_kitti():
     # load net
     cfg = kitti_config
-    num_classes = len(COCO_CLASSES) + 1 # +1 background
+    num_classes = len(KITTI_CLASSES) + 1 # +1 background
     net = build_ssd('test', cfg['min_dim'], cfg['num_classes'])
 
     net.load_state_dict(torch.load(args.trained_model))
