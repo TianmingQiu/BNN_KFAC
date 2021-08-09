@@ -47,7 +47,7 @@ kitti_config = {
     'num_classes': 9,
     'lr_steps': (80000, 100000, 120000),
     # 'max_iter': 400000,
-    'max_iter': 1000,
+    'max_iter': 6000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],

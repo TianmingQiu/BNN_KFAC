@@ -9,9 +9,9 @@ from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3,4,5,6,7'
-DEVICE = torch.device('cuda:7')
-DEVICE_LIST = [0,1,2,3,4,5,6,7]
+os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
+# DEVICE = torch.device('cuda:7')
+DEVICE_LIST = [0,1,2,3]
 
 import sys
 import time
@@ -26,11 +26,10 @@ import numpy as np
 import argparse
 import visdom
 
-
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-PATH_TO_WEIGHTS = 'weights/KITTI_1000.pth'
+PATH_TO_WEIGHTS = None #'weights/KITTI_1000.pth'
 
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
@@ -41,7 +40,7 @@ parser.add_argument('--dataset_root', default=COCO_ROOT, # osp.join('data/coco/'
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
-parser.add_argument('--batch_size', default=32, type=int,
+parser.add_argument('--batch_size', default=64, type=int,
                     help='Batch size for training')
 parser.add_argument('--resume', default= PATH_TO_WEIGHTS, type=str,
                     help='Checkpoint state_dict file to resume training from')
@@ -59,7 +58,7 @@ parser.add_argument('--weight_decay', default=5e-4, type=float,
                     help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float,
                     help='Gamma update for SGD')
-parser.add_argument('--visdom', default=False, type=str2bool,
+parser.add_argument('--visdom', default=True, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
@@ -117,7 +116,7 @@ def train(continue_flag):
 
     if args.cuda and torch.cuda.is_available():
         # speed up using multiple GPUs
-        net = torch.nn.DataParallel(ssd_net,device_ids=[0,1,2,3,4,5,6,7])
+        net = torch.nn.DataParallel(ssd_net,device_ids=DEVICE_LIST)
         cudnn.benchmark = True
 
     if args.resume:
@@ -187,12 +186,12 @@ def train(continue_flag):
             kfac.update(batch_size=images.size(0))
 
 
-        # compute the diagonal correction term D
-        inf = INF(net, kfac.state)
-        inf.update(rank=100)
+        # # compute the diagonal correction term D
+        # inf = INF(net, kfac.state)
+        # inf.update(rank=100)
 
         # inversion and sampling
-        estimator = inf
+        estimator = kfac
         estimator.invert()
 
         mean_predictions = 0
@@ -202,7 +201,7 @@ def train(continue_flag):
             net.eval()
             net.phase = 'test'
             net.softmax = nn.Softmax(dim=-1)
-            net.detect = Detect(9, 0, 1, 0.01, 0.45)
+            net.detect = Detect(9, 0, 200, 0.01, 0.45)
 
             logits = torch.Tensor().to('cuda')
             targets = torch.LongTensor()
@@ -311,7 +310,7 @@ def train(continue_flag):
             torch.save(ssd_net.state_dict(), 'weights/ssd300_kitti_' +
                        repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(),
-               args.save_folder + '' + args.dataset + '_' + cfg.max_iter + '.pth')
+               args.save_folder + '' + args.dataset + '_' + str(cfg['max_iter']) + '.pth')
 
 def adjust_learning_rate(optimizer, gamma, step):
     """Sets the learning rate to the initial LR decayed by 10 at every
@@ -366,4 +365,14 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
 
 
 if __name__ == '__main__':
-    train(continue_flag = True)
+    t = time.localtime()
+    t = 'scripts/' + '-'.join([str(ele) for ele in list(t)[:-3]]) + '.txt'
+
+    orig_stdout = sys.stdout
+    f = open(t, 'w')
+    sys.stdout = f
+
+    train(continue_flag = False)
+
+    sys.stdout = orig_stdout
+    f.close()
