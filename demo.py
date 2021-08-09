@@ -39,9 +39,9 @@ if torch.cuda.is_available():
 y = net(xx)
 
 from data import KITTI_CLASSES as labels
-top_k = 10
+top_k = 1
 plt.figure(figsize=(10,10))
-colors = plt.cm.hsv(np.linspace(0, 1, 21)).tolist()
+colors = plt.cm.hsv(np.linspace(0, 1, 9)).tolist()
 plt.imshow(rgb_image)  # plot the image for matplotlib
 currentAxis = plt.gca()
 
@@ -65,5 +65,3 @@ for i in range(detections.size(1)):
 
 
 plt.savefig('images/foo.png')
-
-

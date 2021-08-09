@@ -1,3 +1,4 @@
+from layers.functions.detection import Detect
 from data.kitti import KittiDetection
 from models.utilities import calibration_curve
 from numpy.core.fromnumeric import diagonal
@@ -29,7 +30,7 @@ import visdom
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-PATH_TO_WEIGHTS = None #'weights/COCO_1000.pth'
+PATH_TO_WEIGHTS = 'weights/KITTI_1000.pth'
 
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
@@ -155,7 +156,7 @@ def train(continue_flag):
         net.cuda()
         optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                 weight_decay=args.weight_decay)
-        data_loader = data.DataLoader(dataset, 1,
+        data_loader = data.DataLoader(dataset, 2,
                         num_workers=args.num_workers,
                         shuffle=True, collate_fn=detection_collate,
                         pin_memory=True)
@@ -197,10 +198,25 @@ def train(continue_flag):
         mean_predictions = 0
         samples = 10  # 10 Monte Carlo samples from the weight posterior.
 
+        def eval__(net,data):
+            net.eval()
+            net.phase = 'test'
+            net.softmax = nn.Softmax(dim=-1)
+            net.detect = Detect(9, 0, 1, 0.01, 0.45)
+
+            logits = torch.Tensor().to('cuda')
+            targets = torch.LongTensor()
+            with torch.no_grad():
+                for images, labels in data:
+                    logits = torch.cat([logits, net(images.to('cuda'))])
+                    targets = torch.cat([targets, labels])
+            return torch.nn.functional.softmax(logits, dim=1), targets
+
+
         with torch.no_grad():
             for sample in range(samples):
                 estimator.sample_and_replace()
-                predictions, labels = net.eval(data_loader)
+                predictions, labels = eval__(net,data_loader)
                 mean_predictions += predictions
             mean_predictions /= samples
         print(f"KFAC Accuracy: {100 * np.mean(np.argmax(mean_predictions.cpu().numpy(), axis=1) == labels.numpy()):.2f}%")
@@ -350,4 +366,4 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
 
 
 if __name__ == '__main__':
-    train(continue_flag = False)
+    train(continue_flag = True)
