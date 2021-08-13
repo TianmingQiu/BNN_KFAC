@@ -130,7 +130,7 @@ class KittiDetection(Dataset):
         # ORIGIN:  [idx,x1+x2,y1+y2,w,h]        e.g. [7.        , 0.39713135, 0.50079371, 0.06983078, 0.06423046]
         # CURRENT: [xmin,xmax,ymin,ymax,idx]    e.g. [0.47359375000000004, 0.42920833333333336, 0.82246875, 0.6674166666666667, 59]
         # return img_path, input_img, filled_labels
-        return input_img, [np.append(a[1:],a[0] + 1) for a in labels], h, w
+        return input_img, [np.append(a[1:],a[0]) for a in labels], h, w
         # +1 for background
 
 
