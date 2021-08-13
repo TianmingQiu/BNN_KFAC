@@ -88,7 +88,9 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     # jaccard index
     overlaps = jaccard(
         truths,
+        # Debug: Already in correct form
         point_form(priors)
+        # priors
     )
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth

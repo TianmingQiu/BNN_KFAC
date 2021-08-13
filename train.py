@@ -29,7 +29,7 @@ import visdom
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-PATH_TO_WEIGHTS = None #'weights/KITTI_1000.pth'
+PATH_TO_WEIGHTS = None #'weights/KITTI_6000.pth'
 
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
@@ -58,7 +58,7 @@ parser.add_argument('--weight_decay', default=5e-4, type=float,
                     help='Weight decay for SGD')
 parser.add_argument('--gamma', default=0.1, type=float,
                     help='Gamma update for SGD')
-parser.add_argument('--visdom', default=True, type=str2bool,
+parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
@@ -254,7 +254,7 @@ def train(continue_flag):
                                   pin_memory=True)
     # create batch iterator
     batch_iterator = iter(data_loader)
-    for iteration in range(args.start_iter, min(1000,cfg['max_iter'])):
+    for iteration in range(args.start_iter, cfg['max_iter']):
         if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
             update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
                             'append', epoch_size)

@@ -10,14 +10,14 @@ if torch.cuda.is_available():
 from ssd import build_ssd
 
 net = build_ssd('test', 300, 9)    # initialize SSD
-net.load_weights('weights/KITTI_1000.pth')
+net.load_weights('weights/KITTI_6000_.pth')
 
 from matplotlib import pyplot as plt
 import matplotlib
 from data import KittiDetection, KITTI_ROOT
 
 testset = KittiDetection(root='data/kitti/train.txt')
-img_id = 60
+img_id = 1500
 image = testset.pull_image(img_id)
 
 rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -39,7 +39,7 @@ if torch.cuda.is_available():
 y = net(xx)
 
 from data import KITTI_CLASSES as labels
-top_k = 1
+top_k = 10
 plt.figure(figsize=(10,10))
 colors = plt.cm.hsv(np.linspace(0, 1, 9)).tolist()
 plt.imshow(rgb_image)  # plot the image for matplotlib
