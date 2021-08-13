@@ -24,7 +24,7 @@ import torch.nn.init as init
 import torch.utils.data as data
 import numpy as np
 import argparse
-import visdom
+# import visdom
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -78,7 +78,7 @@ else:
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
-viz = visdom.Visdom()
+# viz = visdom.Visdom()
 
 def train(continue_flag):
     if args.dataset == 'COCO':
@@ -242,11 +242,11 @@ def train(continue_flag):
 
     step_index = 0
 
-    if args.visdom:
-        vis_title = 'SSD.PyTorch on ' + dataset.name
-        vis_legend = ['Loc Loss', 'Conf Loss', 'Total Loss']
-        iter_plot = create_vis_plot('Iteration', 'Loss', vis_title, vis_legend)
-        epoch_plot = create_vis_plot('Epoch', 'Loss', vis_title, vis_legend)
+    # if args.visdom:
+    #     vis_title = 'SSD.PyTorch on ' + dataset.name
+    #     vis_legend = ['Loc Loss', 'Conf Loss', 'Total Loss']
+    #     iter_plot = create_vis_plot('Iteration', 'Loss', vis_title, vis_legend)
+    #     epoch_plot = create_vis_plot('Epoch', 'Loss', vis_title, vis_legend)
 
     data_loader = data.DataLoader(dataset, args.batch_size,
                                   num_workers=args.num_workers,
@@ -255,13 +255,13 @@ def train(continue_flag):
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
-        if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
-            update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
-                            'append', epoch_size)
-            # reset epoch loss counters
-            loc_loss = 0
-            conf_loss = 0
-            epoch += 1
+        # if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
+        #     update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
+        #                     'append', epoch_size)
+        #     # reset epoch loss counters
+        #     loc_loss = 0
+        #     conf_loss = 0
+        #     epoch += 1
 
         if iteration in cfg['lr_steps']:
             step_index += 1
@@ -301,9 +301,9 @@ def train(continue_flag):
             print('timer: %.4f sec.' % (t1 - t0))
             print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data), end=' ')
 
-        if args.visdom:
-            update_vis_plot(iteration, loss_l.data, loss_c.data,
-                            iter_plot, epoch_plot, 'append')
+        # if args.visdom:
+        #     update_vis_plot(iteration, loss_l.data, loss_c.data,
+        #                     iter_plot, epoch_plot, 'append')
 
         if iteration != 0 and iteration % 5000 == 0:
             print('Saving state, iter:', iteration)
