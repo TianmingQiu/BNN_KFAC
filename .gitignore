@@ -9,6 +9,7 @@ data/*
 !data/scripts
 !data/config.py
 !data/__init__.py
+!data/*.txt
 
 weights/*
 eval/*
