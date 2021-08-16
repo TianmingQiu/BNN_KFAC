@@ -134,7 +134,7 @@ def encode(matched, priors, variances):
     # match wh / prior wh
     g_wh = (matched[:, 2:] - matched[:, :2]) / priors[:, 2:]
     # enforcing positiveness
-    g_wh = torch.max(g_wh, torch.zeros_like(g_wh) + 1e-10)
+    # g_wh = torch.max(g_wh, torch.zeros_like(g_wh) + 1e-10)
     g_wh = torch.log(g_wh) / variances[1]
     # return target for smooth_l1_loss
     return torch.cat([g_cxcy, g_wh], 1)  # [num_priors,4]
