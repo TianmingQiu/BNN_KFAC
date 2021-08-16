@@ -8,6 +8,7 @@ data/*
 !data/kitti.py
 !data/scripts
 !data/config.py
+!data/__init__.py
 
 weights/*
 eval/*
