@@ -45,9 +45,9 @@ coco = {
 # TODO: search kitti configs
 kitti_config = {
     'num_classes': 9,
-    'lr_steps': (3000, 5000),
+    'lr_steps': (5000, 15000, 20000),
     # 'max_iter': 400000,
-    'max_iter': 6000,
+    'max_iter': 30000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],

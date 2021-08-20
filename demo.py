@@ -10,14 +10,14 @@ if torch.cuda.is_available():
 from ssd import build_ssd
 
 net = build_ssd('test', 300, 9)    # initialize SSD
-net.load_weights('weights/KITTI_6000.pth')
+net.load_weights('weights/ssd300_kitti_25000.pth')
 
 from matplotlib import pyplot as plt
 import matplotlib
 from data import KittiDetection, KITTI_ROOT
 
 testset = KittiDetection(root='data/kitti/train.txt')
-img_id = 1000
+img_id = 200
 image = testset.pull_image(img_id)
 
 rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -50,7 +50,7 @@ detections = y.data
 scale = torch.Tensor(rgb_image.shape[1::-1]).repeat(2)
 for i in range(0,detections.size(1)):
     j = 0
-    while detections[0,i,j,0] >= 0.6:
+    while detections[0,i,j,0] >= 0.4:
         score = detections[0,i,j,0]
         label_name = labels[i-1]
         display_txt = '%s: %.2f'%(label_name, score)

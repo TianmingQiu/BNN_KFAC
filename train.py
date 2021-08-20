@@ -107,7 +107,9 @@ def train(continue_flag):
         #     parser.error('Must specify dataset if specifying dataset_root')
 
         cfg = kitti_config
-        dataset = KittiDetection(root='data/kitti/train.txt')
+        dataset = KittiDetection(root='data/kitti/train.txt',
+                                 transform=SSDAugmentation(cfg['min_dim'],
+                                                          MEANS))
     
 
     # build_ssd => SSD => using self.vgg to build network
