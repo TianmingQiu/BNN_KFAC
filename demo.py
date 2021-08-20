@@ -10,7 +10,7 @@ if torch.cuda.is_available():
 from ssd import build_ssd
 
 net = build_ssd('test', 300, 9)    # initialize SSD
-net.load_weights('weights/ssd300_kitti_25000.pth')
+net.load_weights('weights/0818/ssd300_kitti_25000.pth')
 
 from matplotlib import pyplot as plt
 import matplotlib
