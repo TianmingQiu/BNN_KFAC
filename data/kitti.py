@@ -143,7 +143,7 @@ class KittiDetection(Dataset):
         # CURRENT: [xmin,xmax,ymin,ymax,idx]    e.g. [0.47359375000000004, 0.42920833333333336, 0.82246875, 0.6674166666666667, 59]
         # return img_path, input_img, filled_labels
 
-        return input_img, target, h, w
+        return torch.from_numpy(img).permute(2, 0, 1), target, h, w
         # +1 for background
 
 
