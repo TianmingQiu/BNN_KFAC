@@ -9,7 +9,7 @@ from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3,4'
 # DEVICE = torch.device('cuda:7')
 DEVICE_LIST = [0,1,2,3]
 
@@ -40,13 +40,13 @@ parser.add_argument('--dataset_root', default=COCO_ROOT, # osp.join('data/coco/'
                     help='Dataset root directory path')
 parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
                     help='Pretrained base model')
-parser.add_argument('--batch_size', default=4, type=int,
+parser.add_argument('--batch_size', default=32*4, type=int,
                     help='Batch size for training')
 parser.add_argument('--resume', default= PATH_TO_WEIGHTS, type=str,
                     help='Checkpoint state_dict file to resume training from')
 parser.add_argument('--start_iter', default=0, type=int,
                     help='Resume training at this iter')
-parser.add_argument('--num_workers', default=64, type=int,
+parser.add_argument('--num_workers', default=1, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use CUDA to train model')
@@ -144,7 +144,7 @@ def train(continue_flag):
 
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.weight_decay)
-    criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
+    criterion = MultiBoxLoss(cfg['num_classes'], 0.3, True, 0, True, 3, 0.5,
                              False, args.cuda)
 
     torch.cuda.empty_cache()
@@ -164,7 +164,7 @@ def train(continue_flag):
                         pin_memory=True)
 
         batch_iterator = iter(data_loader)
-        criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
+        criterion = MultiBoxLoss(cfg['num_classes'], 0.3, True, 0, True, 3, 0.5,
                                 False, args.cuda)
 
 

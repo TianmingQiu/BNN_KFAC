@@ -63,7 +63,8 @@ class KittiDetection(Dataset):
         #---------
 
         img_path = self.img_files[index % len(self.img_files)].rstrip()
-        img = np.array(Image.open(img_path))
+        # img = np.array(Image.open(img_path))
+        img = cv2.imread(img_path)
 
         # Handles images with less than three channels
         while len(img.shape) != 3:
@@ -81,12 +82,12 @@ class KittiDetection(Dataset):
         # # Add padding
         # input_img = np.pad(img, pad, 'constant', constant_values=128) / 255.
         padded_h, padded_w, _ = input_img.shape
-        # Resize and normalize
-        input_img = resize(input_img, (*self.img_shape, 3), mode='reflect')
-        # Channels-first
-        input_img = np.transpose(input_img, (2, 0, 1))
-        # As pytorch tensor
-        input_img = torch.from_numpy(input_img).float()
+        # # Resize and normalize
+        # input_img = resize(input_img, (*self.img_shape, 3), mode='reflect')
+        # # Channels-first
+        # input_img = np.transpose(input_img, (2, 0, 1))
+        # # As pytorch tensor
+        # input_img = torch.from_numpy(input_img).float()
 
         #---------
         #  Label
