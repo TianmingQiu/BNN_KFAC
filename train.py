@@ -29,7 +29,7 @@ import argparse
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-PATH_TO_WEIGHTS = None #'weights/KITTI_6000.pth'
+PATH_TO_WEIGHTS = 'weights/KITTI_30000.pth'
 
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
@@ -158,11 +158,10 @@ def train(continue_flag):
         net.cuda()
         optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                 weight_decay=args.weight_decay)
-        data_loader = data.DataLoader(dataset, 2,
+        data_loader = data.DataLoader(dataset, args.batch_size,
                         num_workers=args.num_workers,
                         shuffle=True, collate_fn=detection_collate,
                         pin_memory=True)
-
         batch_iterator = iter(data_loader)
         criterion = MultiBoxLoss(cfg['num_classes'], 0.3, True, 0, True, 3, 0.5,
                                 False, args.cuda)
@@ -172,8 +171,7 @@ def train(continue_flag):
         kfac = KFAC(net)
         # kfac = nn.DataParallel(kfac)
 
-        # TODO: Redesign max iteration
-        for iteration in range(args.start_iter, 10):
+        for iteration in range(args.start_iter, 100):
 
             images, targets = next(batch_iterator)
             images = Variable(images.cuda())
@@ -188,44 +186,53 @@ def train(continue_flag):
 
             kfac.update(batch_size=images.size(0))
 
-
-        # # compute the diagonal correction term D
-        # inf = INF(net, kfac.state)
-        # inf.update(rank=100)
-
         # inversion and sampling
         estimator = kfac
-        estimator.invert()
+        # TODO: Parameter Adjustment
+        add = 2
+        multiply = 100 
+
+        estimator.invert(add, multiply)
 
         mean_predictions = 0
         samples = 10  # 10 Monte Carlo samples from the weight posterior.
-
-        def eval__(net,data):
-            net.eval()
-            net.phase = 'test'
-            net.softmax = nn.Softmax(dim=-1)
-            net.detect = Detect(9, 0, 200, 0.01, 0.45)
-
-            logits = torch.Tensor().to('cuda')
-            targets = torch.LongTensor()
-            with torch.no_grad():
-                for images, labels in data:
-                    logits = torch.cat([logits, net(images.to('cuda'))])
-                    targets = torch.cat([targets, labels])
-            return torch.nn.functional.softmax(logits, dim=1), targets
+        data_loader = data.DataLoader(dataset, 1,
+                num_workers=args.num_workers,
+                shuffle=True, collate_fn=detection_collate,
+                pin_memory=True)
+        batch_iterator = iter(data_loader)
 
 
-        with torch.no_grad():
-            for sample in range(samples):
-                estimator.sample_and_replace()
-                predictions, labels = eval__(net,data_loader)
-                mean_predictions += predictions
-            mean_predictions /= samples
-        print(f"KFAC Accuracy: {100 * np.mean(np.argmax(mean_predictions.cpu().numpy(), axis=1) == labels.numpy()):.2f}%")
+        for i,layer in enumerate(list(net.modules())[1:]):
+            if layer in estimator.state:
+                Q_i = estimator.inv_state[layer][0]
+                H_i = estimator.inv_state[layer][1]      
+            if i==0:
+                H = torch.kron(Q_i,H_i)
+            else:
+                H = torch.block_diag(H,torch.kron(Q_i,H_i))
 
-        # calibration
-        ece_bnn = calibration_curve(mean_predictions.cpu().numpy(), labels.numpy())[0]
-        print(f"ECE BNN: {100 * ece_bnn:.2f}%")
+        def gradient(y, x, grad_outputs=None):
+            """Compute dy/dx @ grad_outputs"""
+            if grad_outputs is None:
+                grad_outputs = torch.ones_like(y)
+            grad = torch.autograd.grad(y, [x], grad_outputs = grad_outputs, create_graph=True, retain_graph=True, allow_unused=True)[0]
+            return grad
+
+        sigma = 0
+        for iter in range(1):
+            image, target = next(batch_iterator)
+            g = []
+            pred_j = net(images)
+            for p in net.parameters():
+                g.append(torch.flatten(gradient(pred_j,p)))
+            J = torch.cat(g,dim=0).unsqueeze(0)
+            std = (J @ H @ J.t())**0.5 + sigma
+
+        pred_mean = pred_j.data.numpy().squeeze(1)
+        pred_std = np.array(std, dtype=float)
+        
+
 
     if continue_flag:
         bnn_wrapper()
@@ -375,7 +382,7 @@ if __name__ == '__main__':
     f = open(t, 'w')
     sys.stdout = f
 
-    train(continue_flag = False)
+    train(continue_flag = True)
 
     sys.stdout = orig_stdout
     f.close()
