@@ -100,8 +100,6 @@ def train(continue_flag):
                                image_sets=[('2007', 'trainval')],
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
-
-
     elif args.dataset == 'KITTI':
         # if args.dataset_root == COCO_ROOT:
         #     parser.error('Must specify dataset if specifying dataset_root')
@@ -220,7 +218,7 @@ def train(continue_flag):
             return grad
 
         sigma = 0
-        for iter in range(1):
+        for _ in range(1):
             image, target = next(batch_iterator)
             g = []
             pred_j = net(images)

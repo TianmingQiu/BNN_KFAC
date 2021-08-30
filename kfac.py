@@ -2,7 +2,6 @@ from layers.functions.detection import Detect
 from data.kitti import KittiDetection
 from models.utilities import calibration_curve
 from numpy.core.fromnumeric import diagonal
-from tqdm.std import tqdm
 from models.curvatures import BlockDiagonal, EFB, INF, KFAC
 from data import *
 from utils.augmentations import SSDAugmentation
@@ -25,6 +24,8 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 from scipy.linalg import block_diag
+import tqdm
+import pickle
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -79,33 +80,7 @@ if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
 # viz = visdom.Visdom()
-
-def torch_kron(A, B):
-    return torch.einsum("ab,cd->acbd", A, B).view(A.size(0)*B.size(0),  A.size(1)*B.size(1))
-
-def torch_block_diag(*arrs):
-    bad_args = [k for k in range(len(arrs)) if not (isinstance(arrs[k], torch.Tensor) and arrs[k].ndim == 2)]
-    if bad_args:
-        raise ValueError("arguments in the following positions must be 2-dimension tensor: %s" % bad_args)
-    shapes = torch.tensor([a.shape for a in arrs])
-    i = []
-    v = []
-    r, c = 0, 0
-    for k, (rr, cc) in enumerate(shapes):
-        first_index = torch.arange(r, r + rr, device=arrs[0].device)
-        second_index = torch.arange(c, c + cc, device=arrs[0].device)
-        index = torch.stack((first_index.tile((cc,1)).transpose(0,1).flatten(), second_index.repeat(rr)), dim=0)
-        i += [index]
-        v += [arrs[k].flatten()]
-        r += rr
-        c += cc
-    out_shape = torch.sum(shapes, dim=0).tolist()
-
-    if arrs[0].device == "cpu":
-        out = torch.sparse.DoubleTensor(torch.cat(i, dim=1), torch.cat(v), out_shape)
-    else:
-        out = torch.cuda.sparse.DoubleTensor(torch.cat(i, dim=1).to(arrs[0].device), torch.cat(v), out_shape)
-    return out
+kfac_direc = 'weights/kfac.obj'
 
 def train_kfac(continue_flag):
     if args.dataset == 'COCO':
@@ -127,8 +102,6 @@ def train_kfac(continue_flag):
                                image_sets=[('2007', 'trainval')],
                                transform=SSDAugmentation(cfg['min_dim'],
                                                          MEANS))
-
-
     elif args.dataset == 'KITTI':
         # if args.dataset_root == COCO_ROOT:
         #     parser.error('Must specify dataset if specifying dataset_root')
@@ -140,8 +113,8 @@ def train_kfac(continue_flag):
     
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
-    ssd_net.load_state_dict(torch.load(args.resume))
-    # ssd_net.cuda()
+    ssd_net.load_weights(args.resume)
+    ssd_net.cuda()
     net = ssd_net
 
     if args.cuda and torch.cuda.is_available():
@@ -153,43 +126,49 @@ def train_kfac(continue_flag):
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
             weight_decay=args.weight_decay)
     data_loader = data.DataLoader(dataset, args.batch_size,
-                    num_workers=args.num_workers,
-                    shuffle=True, collate_fn=detection_collate,
-                    pin_memory=True)
+                                  num_workers=args.num_workers,
+                                  shuffle=True, collate_fn=detection_collate,
+                                  pin_memory=True)
 
     # create batch iterator
     batch_iterator = iter(data_loader)
     criterion = MultiBoxLoss(cfg['num_classes'], 0.3, True, 0, True, 3, 0.5,
-                            False, args.cuda)
+                             False, args.cuda)
 
+    if kfac_direc: 
+        print('Loading kfac...')
+        filehandler = open(kfac_direc, 'rb') 
+        kfac = pickle.load(filehandler)
+        print('Finished!')
+    else:
+        # compute KFAC Fisher Information Matrix
+        kfac = KFAC(net)
+        # kfac = nn.DataParallel(kfac)
 
-    # compute KFAC Fisher Information Matrix
-    kfac = KFAC(net)
-    # kfac = nn.DataParallel(kfac)
+        for _ in range(args.start_iter, 10):
 
-    for iteration in range(args.start_iter, 10):
+            images, targets = next(batch_iterator)
+            images = Variable(images.cuda())
+            targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
 
-        images, targets = next(batch_iterator)
-        images = Variable(images.cuda())
-        targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+            out = net(images)
+            optimizer.zero_grad()
+            loss_l, loss_c = criterion(out, targets)
+            loss = loss_l + loss_c
+            loss.backward()
+            optimizer.step()
 
-        out = net(images)
-        optimizer.zero_grad()
-        loss_l, loss_c = criterion(out, targets)
-        loss = loss_l + loss_c
-        loss.backward()
-        optimizer.step()
+            kfac.update(batch_size=images.size(0))
 
-        kfac.update(batch_size=images.size(0))
+        # inversion and sampling
+        estimator = kfac
 
-    # inversion and sampling
-    estimator = kfac
+        estimator.invert(add=1, multiply=2)
 
-    # TODO: Parameter Adjustment
-    add = 2
-    multiply = 100 
+        # saving kfac
+        file_pi = open('weights/kfac.obj', 'wb')
+        pickle.dump(estimator, file_pi)
 
-    estimator.invert(add, multiply)
 
     mean_predictions = 0
     samples = 10  # 10 Monte Carlo samples from the weight posterior.
@@ -199,34 +178,50 @@ def train_kfac(continue_flag):
             pin_memory=True)
     batch_iterator = iter(data_loader)
 
-    H = np.array([])
-    for i,layer in enumerate(list(net.modules())[2:]):
-        if layer in estimator.state:
-            Q_i = estimator.inv_state[layer][0].cpu()
-            H_i = estimator.inv_state[layer][1].cpu()
+    def eval_fgsm_bnn(model,
+                    data,
+                    estimator,
+                    samples=30,
+                    device=torch.device('cuda')):
 
-            H = np.kron(Q_i,H_i) if H.any() else block_diag(H,np.kron(Q_i,H_i))
+        model.eval()
+        mean_predictions = 0
 
-    def gradient(y, x, grad_outputs=None):
-        """Compute dy/dx @ grad_outputs"""
-        if grad_outputs is None:
-            grad_outputs = torch.ones_like(y)
-        grad = torch.autograd.grad(y, [x], grad_outputs = grad_outputs, create_graph=True, retain_graph=True, allow_unused=True)[0]
-        return grad
+        samples = tqdm.tqdm(range(samples))
+        for _ in samples:
+            estimator.sample_and_replace()
+            predictions, labels, scores = eval_fgsm(model, data)
+            mean_predictions += predictions
+        mean_predictions /= len(samples)
 
-    sigma = 0
-    for iteration in range(1):
-        image, target = next(batch_iterator)
-        g = []
-        pred_j = net(images)
-        for p in net.parameters():
-            g.append(torch.flatten(gradient(pred_j,p)))
-        J = torch.cat(g,dim=0).unsqueeze(0)
-        std = (J @ H @ J.t())**0.5 + sigma
+        return mean_predictions, labels
 
-    pred_mean = pred_j.data.numpy().squeeze(1)
-    pred_std = np.array(std, dtype=float)
+    def eval_fgsm(model, x, threshold = 0.2):
+        x = x.cuda()
+        model.softmax = nn.Softmax(dim=-1)
+        model.detect = Detect()
+        model.phase = 'test'
+
+        y = model(x)
+        detections = y
+        out = []
+        for i in range(detections.size(1)):
+            for j in range(detections.size(2) - 1):
+                if detections[0,i,j,0] >= threshold:
+                    out.append(torch.cat((torch.Tensor([i]), detections[0,i,j,:])))
+
+        out = torch.stack(out)
+        return out[:,2:], out[:,0], out[:,1]
+
+
         
+    for iteration in range(1):
+        images, targets = next(batch_iterator)
+        images = Variable(images.cuda())
+        targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+
+        mean_predictions, labels = eval_fgsm_bnn(net, images, kfac)
+                
 
 
 
