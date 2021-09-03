@@ -29,6 +29,7 @@ from scipy.linalg import block_diag
 
 def gradient(y, x, grad_outputs=None):
     """Compute dy/dx @ grad_outputs"""
+    y.retain_grad()
     if grad_outputs is None:
         grad_outputs = torch.ones_like(y)
     grad = torch.autograd.grad(y, [x], grad_outputs = grad_outputs, create_graph=True, retain_graph=True, allow_unused=True)[0]
