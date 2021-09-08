@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from layers import *
 from data import voc, coco, kitti_config
 import os
+from layers.box_utils import decode, nms
 
 
 class SSD(nn.Module):
@@ -115,15 +116,55 @@ class SSD(nn.Module):
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
         # demo実行時
         if self.phase == "test":
-            # PyTorch1.5.0 support new-style autograd function
-            #output = self.detect(
-            output = self.detect.apply(self.num_classes, 0, 200, 0.01, 0.45,
-            # PyTorch1.5.0 support new-style autograd function
-                loc.view(loc.size(0), -1, 4),                   # loc preds
-                self.softmax(conf.view(conf.size(0), -1,
-                             self.num_classes)),                # conf preds
-                self.priors.type(type(x.data))                  # default boxes
-            )
+            # # PyTorch1.5.0 support new-style autograd function
+            # output = self.detect.apply(self.num_classes, 0, 200, 0.01, 0.45,
+            #     loc.view(loc.size(0), -1, 4),                   # loc preds
+            #     self.softmax(conf.view(conf.size(0), -1,
+            #                  self.num_classes)),                # conf preds
+            #     self.priors.type(type(x.data))                  # default boxes
+            # )
+            loc_data = loc.view(loc.size(0), -1, 4)
+            conf_data = self.softmax(conf.view(conf.size(0), -1,self.num_classes))
+            prior_data = self.priors.type(type(x.data))
+            num_classes=9; bkg_label=0; top_k=200; conf_thresh=0.01; nms_thresh=0.45; variance = [0.1,0.2]
+            num = loc_data.size(0)  # batch size
+            num_priors = prior_data.size(0)
+            # [バッチサイズN,クラス数21,トップ200件,確信度+位置]のゼロリストを作成
+            output = torch.zeros(num, self.num_classes, 200, 5)
+            # 確信度を[バッチサイズN,クラス数,ボックス数]の順番に変更
+            conf_preds = conf_data.view(num, num_priors,
+                                        self.num_classes).transpose(2, 1)
+
+            # Decode predictions into bboxes.
+            for i in range(num):
+                decoded_boxes = decode(loc_data[i], prior_data, variance)
+                # For each class, perform nms
+                conf_scores = conf_preds[i].clone()
+
+                for cl in range(1, num_classes):
+                    # 確信度の閾値を使ってボックスを削除
+                    c_mask = conf_scores[cl].gt(conf_thresh)
+                    scores = conf_scores[cl][c_mask]
+                    # handbook
+                    #if scores.dim() == 0:
+                    if scores.size(0) == 0:
+                    # handbook
+                        continue
+                    l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes)
+                    # ボックスのデコード処理
+                    boxes = decoded_boxes[l_mask].view(-1, 4)
+                    # idx of highest scoring and non-overlapping boxes per class
+                    # boxesからNMSで重複するボックスを削除
+                    ids, count = nms(boxes, scores, nms_thresh, top_k)
+                    output[i, cl, :count] = \
+                        torch.cat((scores[ids[:count]].unsqueeze(1),
+                                boxes[ids[:count]]), 1)
+            flt = output.contiguous().view(num, -1, 5)
+            _, idx = flt[:, :, 0].sort(1, descending=True)
+            _, rank = idx.sort(1)
+            flt[(rank < top_k).unsqueeze(-1).expand_as(flt)].fill_(0)
+            return output
+
         else:
         # train実行時
             output = (
