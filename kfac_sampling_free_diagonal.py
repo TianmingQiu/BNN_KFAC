@@ -11,7 +11,7 @@ from ssd import build_ssd
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # DEVICE = torch.device('cuda:7')
-DEVICE_LIST = [2]
+DEVICE_LIST = [3]
 
 import sys
 import time
@@ -194,23 +194,20 @@ def train_kfac(continue_flag):
         var = []
         for _ in range(1,out.size(0)):
             gradient_buffer = []
-            for i in range(2,6):
-                loss = out[_,i]
-                # loss.backward(torch.ones(loss.size()))
-                # g = []
-                # # DEBUG: list(net.parameters())[0]
-                # for layer in net.parameters():    
-                #     for p in layer.flatten():
-                #         g.
-                # append(p.grad or 0)
+            for i in range(1,6):
+
+                # retaining graph for multiple backward propagations
+                out[_,i].backward(retain_graph = True)
 
                 # Loading all gradients from layers
                 all_grad = torch.Tensor()
-                for layer in diag.model.modules():
+                for layer in model.modules():
                     if layer.__class__.__name__ in diag.layer_types:
                         if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                             grads = layer.weight.grad.contiguous().view(layer.weight.grad.shape[0], -1)
-                            all_grad = torch.cat(all_grad, grads)
+                            if layer.bias is not None:
+                                grads = torch.cat([grads, layer.bias.grad.unsqueeze(dim=1)], dim=1)
+                            all_grad = torch.cat((all_grad, torch.flatten(grads)))
                 
                 J = all_grad.unsqueeze(0) 
                 pred_std = torch.abs(J * H * J).sum()
@@ -219,13 +216,13 @@ def train_kfac(continue_flag):
             var.append(torch.FloatTensor(gradient_buffer))
         var = torch.stack(var)
 
-        return out, var
+        return out[1:], var
 
-
-        
-    for iteration in range(1):
+    num_iterations = 1
+    tic = time.time()
+    for iteration in range(num_iterations):
         testset = KittiDetection(root='data/kitti/train.txt')
-        img_id = 200
+        img_id = 206
         image = testset.pull_image(img_id)
         x = cv2.resize(image, (300, 300)).astype(np.float32)
         x -= (104.0, 117.0, 123.0)
@@ -252,21 +249,36 @@ def train_kfac(continue_flag):
 
 
         mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
-        for _ in range(mean_predictions.size(0)):
-            print(mean_predictions[_])
-            print(uncertainty[_])
+        mean_predictions = mean_predictions.detach()
+        uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
         scale = torch.Tensor(rgb_image.shape[1::-1]).repeat(2)
-        pt = (mean_predictions[_,1:]*scale).cpu().numpy()
-        coords = (pt[0], pt[1]), pt[2]-pt[0]+1, pt[3]-pt[1]+1
-        index = mean_predictions[_,0]
-        color = colors[index]
-        score = mean_predictions[_,1]
-        label_name = labels[index - 1]
-        display_txt = '%s: %.2f'%(label_name, score)
 
-        currentAxis = plt.gca()
-        currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
-        currentAxis.text(pt[0], pt[1], display_txt, bbox={'facecolor':color, 'alpha':0.5})
+        for prediction,unc in zip(mean_predictions,uncertainty):
+            index = int(prediction[0])
+            label_name = labels[index - 1]
+            score = prediction[1]
+
+            coords = prediction[2:]
+            pt = (coords*scale).cpu().numpy()
+            coords = (pt[0], pt[1]), pt[2]-pt[0]+1, pt[3]-pt[1]+1
+
+            color = colors[index]
+            label_name = labels[index - 1]
+            display_txt = '%s: %.2f'%(label_name, score) + ' '
+
+            currentAxis = plt.gca()
+            currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
+            currentAxis.text(pt[0], pt[1], display_txt + "{:.2f}".format(float(unc[0]) * 10), bbox={'facecolor':color, 'alpha':0.5}, fontsize = 8)
+
+            # currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+            # currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+            # currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+            # currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+
+
+        plt.savefig('images/diag.png')
+    toc = time.time()
+    print('Average Bayesian inference duration:',  "{:.2f}s".format((toc-tic) / num_iterations))
 
 
 if __name__ == '__main__':
