@@ -9,9 +9,9 @@ from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # DEVICE = torch.device('cuda:7')
-DEVICE_LIST = [0,1,2,3]
+DEVICE_LIST = [2]
 
 import sys
 import time
@@ -172,60 +172,49 @@ def train_kfac(continue_flag):
         file_pi = open('weights/diag.obj', 'wb')
         pickle.dump(estimator, file_pi)
 
-    # data_loader = data.DataLoader(dataset, 1,
-    #         num_workers=args.num_workers,
-    #         shuffle=True, collate_fn=detection_collate,
-    #         pin_memory=True)
-    # batch_iterator = iter(data_loader)
-
-    def eval_fgsm(model, x, threshold = 0.2):
-        x = x.cuda()
-        model.softmax = nn.Softmax(dim=-1)
-        model.detect = Detect()
-        model.phase = 'test'
-
-        y = model(x)
-        detections = y
-        out = []
-        for i in range(detections.size(1)):
-            for j in range(detections.size(2) - 1):
-                if detections[0,i,j,0] >= threshold:
-                    out.append(torch.cat((torch.Tensor([i]), detections[0,i,j,:])))
-
-        out = torch.stack(out)
-        # DETECTIONS: CLASS(1), LOC(4)
-        return out[:,2:], out[:,0], out[:,1]
-
-    def eval_unvertainty_diag(model, x, H):
+    def eval_unvertainty_diag(model, x, H, diag):
         threshold = 0.2
         x = Variable(x.cuda(), requires_grad=True)
         model.softmax = nn.Softmax(dim=-1)
         model.detect = Detect()
         model.phase = 'test'
+        model.cuda()
 
-        detections = model(x)
-        out = []
+        detections = model.forward(x)
+        out = torch.Tensor([[0,0,0,0,0,0]])
         for i in range(detections.size(1)):
             for j in range(detections.size(2) - 1):
                 if detections[0,i,j,0] >= threshold:
-                    out.append(torch.cat((torch.Tensor([i]), detections[0,i,j,:])))
+                    # out.append(torch.cat((torch.Tensor([i]), detections[0,i,j,:])))
+                    out = torch.cat(( out , torch.cat((torch.Tensor([i]), detections[0,i,j,:])).unsqueeze(dim=0) ))
 
-        out = torch.stack(out)
+        # out = torch.stack(out)
         # DETECTIONS: SCORE(1), LOC(4)
         # OUT       : CLASS(1), SCORE(1), LOC(4)
-
         var = []
-        for _ in range(out.size(0)):
+        for _ in range(1,out.size(0)):
             gradient_buffer = []
-            for i in range(1,6):
-                g = []
-                # DEBUG: list(net.parameters())[0]
-                for layer in net.parameters():    
-                    for p in layer.flatten():
-                        g.append(torch.flatten(gradient(out[_,i], p)))
-                J = torch.cat(g, dim=0).unsqueeze(0) 
+            for i in range(2,6):
+                loss = out[_,i]
+                # loss.backward(torch.ones(loss.size()))
+                # g = []
+                # # DEBUG: list(net.parameters())[0]
+                # for layer in net.parameters():    
+                #     for p in layer.flatten():
+                #         g.
+                # append(p.grad or 0)
+
+                # Loading all gradients from layers
+                all_grad = torch.Tensor()
+                for layer in diag.model.modules():
+                    if layer.__class__.__name__ in diag.layer_types:
+                        if layer.__class__.__name__ in ['Linear', 'Conv2d']:
+                            grads = layer.weight.grad.contiguous().view(layer.weight.grad.shape[0], -1)
+                            all_grad = torch.cat(all_grad, grads)
+                
+                J = all_grad.unsqueeze(0) 
                 pred_std = torch.abs(J * H * J).sum()
-                del J,g
+                del J, all_grad
                 gradient_buffer.append(pred_std)
             var.append(torch.FloatTensor(gradient_buffer))
         var = torch.stack(var)
@@ -262,7 +251,7 @@ def train_kfac(continue_flag):
         H = torch.cat(h, dim=0)
 
 
-        mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H)
+        mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
         for _ in range(mean_predictions.size(0)):
             print(mean_predictions[_])
             print(uncertainty[_])
