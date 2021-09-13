@@ -202,7 +202,7 @@ def kfac_diag(continue_flag):
 
         return out[1:], uncertainties
 
-    num_iterations = 50
+    num_iterations = 30
     tic = time.time()
     for iteration in range(num_iterations):
         testset = KittiDetection(root='data/kitti/train.txt')
@@ -238,8 +238,6 @@ def kfac_diag(continue_flag):
 
         mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
         mean_predictions = mean_predictions.detach()
-        # const = 2*np.e*np.pi
-        # entropy = 0.5 * torch.log2(const * uncertainty).detach_()
         uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
 
         scale = torch.Tensor(image.shape[1::-1]).repeat(2)
