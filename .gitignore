@@ -13,7 +13,7 @@ data/*
 
 weights/*
 eval/*
-images/*
+; images/*
 scripts/*
 
 # Byte-compiled / optimized / DLL files

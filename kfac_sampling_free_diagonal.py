@@ -66,51 +66,27 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
-args = parser.parse_args()
+try:
+    args = parser.parse_args()
+except:
+    args = {'batch_size':4,
+            'resume': PATH_TO_WEIGHTS,
+            'start_iter': 0,
+            'num_workers': 4,
+            'cuda': True,
+            'lr': 1e-4,
+            'momentum': 0.9,
+            'weight_decay': 5e-4,
+            'gamma': 0.1,
+            'save_folder': 'weights/'}
 
-
-if torch.cuda.is_available():
-    if args.cuda:
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
-    if not args.cuda:
-        print("WARNING: It looks like you have a CUDA device, but aren't " +
-              "using CUDA.\nRun with --cuda for optimal training speed.")
-        torch.set_default_tensor_type('torch.FloatTensor')
-else:
-    torch.set_default_tensor_type('torch.FloatTensor')
-
-if not os.path.exists(args.save_folder):
-    os.mkdir(args.save_folder)
-
+torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 def kfac_diag(continue_flag):
-    if args.dataset == 'COCO':
-        if args.dataset_root == VOC_ROOT:
-            if not os.path.exists(COCO_ROOT):
-                parser.error('Must specify dataset_root if specifying dataset')
-            print("WARNING: Using default COCO dataset_root because " +
-                  "--dataset_root was not specified.")
-            args.dataset_root = COCO_ROOT
-        cfg = coco
-        dataset = COCODetection(root=args.dataset_root,
+    cfg = kitti_config
+    dataset = KittiDetection(root='data/kitti/train.txt',
                                 transform=SSDAugmentation(cfg['min_dim'],
-                                                          MEANS))
-    elif args.dataset == 'VOC':
-        if args.dataset_root == COCO_ROOT:
-            parser.error('Must specify dataset if specifying dataset_root')
-        cfg = voc
-        dataset = VOCDetection(root=args.dataset_root,
-                               image_sets=[('2007', 'trainval')],
-                               transform=SSDAugmentation(cfg['min_dim'],
-                                                         MEANS))
-    elif args.dataset == 'KITTI':
-        # if args.dataset_root == COCO_ROOT:
-        #     parser.error('Must specify dataset if specifying dataset_root')
-
-        cfg = kitti_config
-        dataset = KittiDetection(root='data/kitti/train.txt',
-                                 transform=SSDAugmentation(cfg['min_dim'],
-                                                          MEANS))
+                                                        MEANS))
     
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
@@ -178,7 +154,7 @@ def kfac_diag(continue_flag):
         pickle.dump(estimator, file_pi)
 
     def eval_unvertainty_diag(model, x, H, diag):
-        threshold = 0.2
+        threshold = 0.5
         x = Variable(x.cuda(), requires_grad=True)
         model.softmax = nn.Softmax(dim=-1)
         model.detect = Detect()
@@ -223,12 +199,14 @@ def kfac_diag(continue_flag):
 
         return out[1:], uncertainties
 
-    num_iterations = 100
+    num_iterations = 1
     tic = time.time()
     for iteration in range(num_iterations):
         testset = KittiDetection(root='data/kitti/train.txt')
         img_id = 206 + iteration
         image = testset.pull_image(img_id)
+        # img_name = '/root/Documents/BNN_KFAC/data/kitti/testing/image_2/000402.png'
+        # image = cv2.imread(img_name, cv2.IMREAD_COLOR)
         x = cv2.resize(image, (300, 300)).astype(np.float32)
         x -= (104.0, 117.0, 123.0)
         x = x.astype(np.float32)
@@ -255,7 +233,10 @@ def kfac_diag(continue_flag):
 
         mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
         mean_predictions = mean_predictions.detach()
+        # const = 2*np.e*np.pi
+        # entropy = 0.5 * torch.log2(const * uncertainty).detach_()
         uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
+
         scale = torch.Tensor(rgb_image.shape[1::-1]).repeat(2)
 
         for prediction,unc in zip(mean_predictions,uncertainty):
@@ -273,14 +254,14 @@ def kfac_diag(continue_flag):
 
             currentAxis = plt.gca()
             currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
-            currentAxis.text(pt[0], pt[1], display_txt + "{:.2f}".format(float(unc[0]) * 10), bbox={'facecolor':color, 'alpha':0.5}, fontsize = 8)
+            currentAxis.text(pt[0], pt[1], display_txt + "{:.1f}e-3".format(float(unc[0]) * 1000), bbox={'facecolor':color, 'alpha':0.5}, fontsize = 8)
 
             # currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
             # currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
             # currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
             # currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
 
-        # plt.savefig('images/diag.png')
+        plt.savefig('images/diag.png')
 
     toc = time.time()
     print('Average Bayesian inference duration:',  "{:.2f}s".format((toc-tic) / num_iterations))
