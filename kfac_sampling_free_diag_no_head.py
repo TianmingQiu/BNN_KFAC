@@ -89,7 +89,7 @@ def kfac_diag(continue_flag):
                                                         MEANS))
     
 
-    ssd_net = build_ssd('test', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
+    ssd_net = build_ssd('bnn', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
     ssd_net.load_weights(args.resume)
     ssd_net.cuda()
     net = ssd_net
@@ -157,9 +157,6 @@ def kfac_diag(continue_flag):
     def eval_unvertainty_diag(model, x, H, diag):
         threshold = 0.5
         x = Variable(x.cuda(), requires_grad=True)
-        # model.softmax = nn.Softmax(dim=-1)
-        # model.detect = Detect()
-        # model.phase = 'test'
         model.cuda()
 
         detections = model.forward(x)
@@ -205,7 +202,7 @@ def kfac_diag(continue_flag):
 
         return out[1:], uncertainties
 
-    num_iterations = 100
+    num_iterations = 50
     tic = time.time()
     for iteration in range(num_iterations):
         testset = KittiDetection(root='data/kitti/train.txt')
@@ -229,65 +226,48 @@ def kfac_diag(continue_flag):
             rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             plt.imshow(rgb_image)
 
-        threshold = 0.5
-        x = Variable(x.cuda(), requires_grad=True)
-        # model.softmax = nn.Softmax(dim=-1)
-        # model.detect = Detect()
-        # model.phase = 'test'
-        net.cuda()
-        detections = net(xx)
-
-        # detections = model.forward(x)
-        # out = torch.Tensor([[0,0,0,0,0,0]])
-        # for i in range(detections.size(1)):
-        #     for j in range(detections.size(2) - 1):
-        #         if detections[0,i,j,0] >= threshold:
-        #             # out.append(torch.cat((torch.Tensor([i]), detections[0,i,j,:])))
-        #             out = torch.cat(( out , torch.cat((torch.Tensor([i]), detections[0,i,j,:])).unsqueeze(dim=0) ))
+        h = []
+        for i,layer in enumerate(list(diag.model.modules())[1:]):
+            if layer in diag.model.vgg: 
+                continue
+            if layer in diag.state:
+                H_i = diag.inv_state[layer]
+                h.append(torch.flatten(H_i))
+        H = torch.cat(h, dim=0)
 
 
-        # h = []
-        # for i,layer in enumerate(list(diag.model.modules())[1:]):
-        #     if layer in diag.model.vgg: 
-        #         continue
-        #     if layer in diag.state:
-        #         H_i = diag.inv_state[layer]
-        #         h.append(torch.flatten(H_i))
-        # H = torch.cat(h, dim=0)
+        mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
+        mean_predictions = mean_predictions.detach()
+        # const = 2*np.e*np.pi
+        # entropy = 0.5 * torch.log2(const * uncertainty).detach_()
+        uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
 
+        scale = torch.Tensor(image.shape[1::-1]).repeat(2)
 
-        # mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
-        # mean_predictions = mean_predictions.detach()
-        # # const = 2*np.e*np.pi
-        # # entropy = 0.5 * torch.log2(const * uncertainty).detach_()
-        # uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
+        for prediction,unc in zip(mean_predictions,uncertainty):
+            index = int(prediction[0])
+            label_name = labels[index - 1]
+            score = prediction[1]
 
-        # scale = torch.Tensor(image.shape[1::-1]).repeat(2)
+            coords = prediction[2:]
+            pt = (coords*scale).cpu().numpy()
+            coords = (pt[0], pt[1]), pt[2]-pt[0]+1, pt[3]-pt[1]+1
 
-        # for prediction,unc in zip(mean_predictions,uncertainty):
-        #     index = int(prediction[0])
-        #     label_name = labels[index - 1]
-        #     score = prediction[1]
+            if verbose:
+                color = colors[index]
+                label_name = labels[index - 1]
+                display_txt = '%s: %.2f'%(label_name, score) + ' '
 
-        #     coords = prediction[2:]
-        #     pt = (coords*scale).cpu().numpy()
-        #     coords = (pt[0], pt[1]), pt[2]-pt[0]+1, pt[3]-pt[1]+1
+                currentAxis = plt.gca()
+                currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
+                currentAxis.text(pt[0], pt[1], display_txt + "{:.1f}e-3".format(float(unc[0]) * 1000), bbox={'facecolor':color, 'alpha':0.5}, fontsize = 8)
 
-        #     if verbose:
-        #         color = colors[index]
-        #         label_name = labels[index - 1]
-        #         display_txt = '%s: %.2f'%(label_name, score) + ' '
+            # currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+            # currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+            # currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+            # currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
 
-        #         currentAxis = plt.gca()
-        #         currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
-        #         currentAxis.text(pt[0], pt[1], display_txt + "{:.1f}e-3".format(float(unc[0]) * 1000), bbox={'facecolor':color, 'alpha':0.5}, fontsize = 8)
-
-        #     # currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
-        #     # currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
-        #     # currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
-        #     # currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
-
-        # # plt.savefig('images/diag_no_head.png')
+        # plt.savefig('images/diag_no_head.png')
 
     toc = time.time()
     print('Average Bayesian inference duration:',  "{:.2f}s".format((toc-tic) / num_iterations))

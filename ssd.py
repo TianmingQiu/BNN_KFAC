@@ -27,7 +27,7 @@ class SSD(nn.Module):
            boxes specific to the layer's feature map size.
     See: https://arxiv.org/pdf/1512.02325.pdf for more details.
     Args:
-        phase: (string) Can be "test" or "train"
+        phase: (string) Can be "test" or "train" or "bnn"
         size: input image size
         base: VGG16 layers for input, size of either 300 or 500
         extras: extra layers that feed to multibox loc and conf layers
@@ -57,12 +57,18 @@ class SSD(nn.Module):
         self.conf = nn.ModuleList(head[1])
 
         # demo実行時
-        if phase == 'test':
+        if phase in ['test','bnn']:
             self.softmax = nn.Softmax(dim=-1)
             # PyTorch1.5.0 support new-style autograd function
             #self.detect = Detect(num_classes, 0, 200, 0.01, 0.45)
             self.detect = Detect()
             # PyTorch1.5.0 support new-style autograd function
+
+        if phase == 'bnn':
+            for layer in self.vgg:
+                for param in layer.parameters():
+                    param.requires_grad = False
+
 
     # 順伝播
     def forward(self, x):
@@ -115,7 +121,7 @@ class SSD(nn.Module):
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
         # demo実行時
-        if self.phase == "test":
+        if self.phase in ["test","bnn"]:
             # # PyTorch1.5.0 support new-style autograd function
             # output = self.detect.apply(self.num_classes, 0, 200, 0.01, 0.45,
             #     loc.view(loc.size(0), -1, 4),                   # loc preds
@@ -310,7 +316,7 @@ mbox = {
 
 # ネットワークのリスト作成
 def build_ssd(phase, size=300, num_classes=21):
-    if phase != "test" and phase != "train":
+    if phase not in ["test","train","bnn"]:
         print("ERROR: Phase: " + phase + " not recognized")
         return
     if size != 300:
