@@ -275,9 +275,7 @@ class KernelDiagonal(Curvature):
             if layer.__class__.__name__ in self.layer_types:
                 if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                     # kernel_numel = layer.kernel_size[0] ** 2
-                    grads = layer.weight.grad.contiguous().view([-1,layer.out_channels])
-                    if layer.bias is not None:
-                        grads_bias = layer.bias
+                    grads = layer.weight.grad.contiguous().view(layer.out_channels,-1)
                     
                     # self.state[layer] = [ ... , ... , ... ]
                     grad_buffer = []
@@ -285,8 +283,8 @@ class KernelDiagonal(Curvature):
                         # TODO: determine whether batch_size is available
                         grad_buffer.append(torch.ger(grad,grad) * batch_size)
                     if layer.bias is not None:
-                        for bias in layer.bias:
-                            grad_buffer.append(torch.tensor([bias]))
+                        bias = torch.tensor(layer.bias)
+                        grad_buffer.append(torch.ger(bias,bias) * batch_size)
 
                     if layer in self.state:
                         for i in range(len(grads)):
