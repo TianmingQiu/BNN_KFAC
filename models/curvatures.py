@@ -267,6 +267,77 @@ class BlockDiagonal(Curvature):
             'inv_state': self.inv_state,
             'model': self.model,}, filename)
 
+class KernelDiagonal(Curvature):
+    def update(self,
+               batch_size: int):
+        # TODO: include / exclude vgg
+        for layer in self.model.modules():
+            if layer.__class__.__name__ in self.layer_types:
+                if layer.__class__.__name__ in ['Linear', 'Conv2d']:
+                    # kernel_numel = layer.kernel_size[0] ** 2
+                    grads = layer.weight.grad.contiguous().view([-1,layer.out_channels])
+                    if layer.bias is not None:
+                        grads_bias = layer.bias
+                    
+                    # self.state[layer] = [ ... , ... , ... ]
+                    grad_buffer = []
+                    for grad in grads:
+                        # TODO: determine whether batch_size is available
+                        grad_buffer.append(torch.ger(grad,grad) * batch_size)
+                    if layer.bias is not None:
+                        for bias in layer.bias:
+                            grad_buffer.append(torch.tensor([bias]))
+
+                    if layer in self.state:
+                        for i in range(len(grads)):
+                            self.state[layer][i] += grad_buffer[i]
+                    else:
+                        self.state[layer] = grad_buffer
+
+                elif layer.__class__.__name__ == 'MultiheadAttention':
+                    raise NotImplementedError
+                    grads = layer.in_proj_weight.grad.contiguous().view(layer.in_proj_weight.grad.shape[0], -1)
+                    if layer.in_proj_bias is not None:
+                        grads = torch.cat([grads, layer.in_proj_bias.grad])
+                    grads = torch.ger(grads, grads) * batch_size
+                    if 'attn_in' in self.state:
+                        self.state['attn_in'] += grads
+                    else:
+                        self.state['attn_in'] = grads
+
+                    grads = layer.out_proj.weight.grad.contiguous().view(layer.out_proj.weight.grad.shape[0], -1)
+                    if layer.out_proj.bias is not None:
+                        grads = torch.cat([grads, layer.out_proj.bias.grad])
+                    grads = torch.ger(grads, grads) * batch_size
+                    if 'attn_out' in self.state:
+                        self.state['attn_out'] += grads
+                    else:
+                        self.state['attn_out'] = grads
+
+    def invert(self,
+               add: Union[float, list, tuple] = 0.,
+               multiply: Union[float, list, tuple] = 1.):
+        assert self.state, "State dict is empty. Did you call 'update' prior to this?"
+        if self.inv_state:
+            Warning("State has already been inverted. Is this expected?")
+        for index, (layer, values) in enumerate(self.state.items()):
+            if not isinstance(add, float) and not isinstance(multiply, float):
+                assert len(add) == len(multiply) == len(self.state)
+                n, s = add[index], multiply[index]
+            else:
+                n, s = add, multiply
+
+            self.inv_state[layer] = []
+            for value in values:
+                reg = torch.diag(value.new(value.shape[0]).fill_(n))
+                self.inv_state[layer].append((s * value + reg).inverse())
+
+    def save(self, filename):
+        print('Writting %s\n' % filename)
+        torch.save({
+            'state': self.state,
+            'inv_state': self.inv_state,
+            'model': self.model,}, filename)
 
 class KFAC(Curvature):
     r"""The Kronecker-factored Fisher information matrix approximation.
