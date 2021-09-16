@@ -33,3 +33,7 @@ def gradient(y, x, grad_outputs=None):
         grad_outputs = torch.ones_like(y)
     grad = torch.autograd.grad(y, [x], grad_outputs = grad_outputs, create_graph=True, retain_graph=True, allow_unused=True)[0]
     return grad
+
+def computeFisherSum(grad):
+    fisher = torch.ger(grad,grad)
+    return fisher.abs().sum()
