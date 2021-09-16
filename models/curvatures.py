@@ -269,9 +269,12 @@ class BlockDiagonal(Curvature):
 
 class KernelDiagonal(Curvature):
     def update(self,
-               batch_size: int):
+               batch_size: int,
+               exclude_vgg = True):
         # TODO: include / exclude vgg
         for layer in self.model.modules():
+            if exclude_vgg and layer in self.model.vgg:
+                continue
             if layer.__class__.__name__ in self.layer_types:
                 if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                     # kernel_numel = layer.kernel_size[0] ** 2
