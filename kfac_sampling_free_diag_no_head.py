@@ -80,7 +80,18 @@ except:
             'gamma': 0.1,
             'save_folder': 'weights/'}
 
-torch.set_default_tensor_type('torch.cuda.FloatTensor')
+if torch.cuda.is_available():
+    if args.cuda:
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    if not args.cuda:
+        print("WARNING: It looks like you have a CUDA device, but aren't " +
+              "using CUDA.\nRun with --cuda for optimal training speed.")
+        torch.set_default_tensor_type('torch.FloatTensor')
+else:
+    torch.set_default_tensor_type('torch.FloatTensor')
+
+if not os.path.exists(args.save_folder):
+    os.mkdir(args.save_folder)
 
 def kfac_diag(continue_flag):
     cfg = kitti_config
