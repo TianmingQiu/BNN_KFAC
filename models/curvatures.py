@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Union, List, Any, Dict
 import copy
+from utils.utils import computeFisherSum
 
 from numpy.linalg import inv, cholesky
 import torch
@@ -10,9 +11,10 @@ from torch import Tensor
 from torch.nn import Module, Sequential
 import torch.nn.functional as F
 from tqdm import tqdm
+import sys
+sys.path.append("..") 
 
 from .utilities import get_eigenvectors, kron
-
 
 class Curvature(ABC):
     """Base class for all src approximations.
@@ -301,26 +303,11 @@ class KernelDiagonal(Curvature):
                             self.state[layer][i] += grad_buffer[i]
                     else:
                         self.state[layer] = grad_buffer
+                    # print('Sum of all elements:',computeFisherSum(grads.view(-1).cpu()))
+                    # print('Sum of block elements:', [a.abs().sum() for a in grad_buffer])
 
                 elif layer.__class__.__name__ == 'MultiheadAttention':
                     raise NotImplementedError
-                    grads = layer.in_proj_weight.grad.contiguous().view(layer.in_proj_weight.grad.shape[0], -1)
-                    if layer.in_proj_bias is not None:
-                        grads = torch.cat([grads, layer.in_proj_bias.grad])
-                    grads = torch.ger(grads, grads) * batch_size
-                    if 'attn_in' in self.state:
-                        self.state['attn_in'] += grads
-                    else:
-                        self.state['attn_in'] = grads
-
-                    grads = layer.out_proj.weight.grad.contiguous().view(layer.out_proj.weight.grad.shape[0], -1)
-                    if layer.out_proj.bias is not None:
-                        grads = torch.cat([grads, layer.out_proj.bias.grad])
-                    grads = torch.ger(grads, grads) * batch_size
-                    if 'attn_out' in self.state:
-                        self.state['attn_out'] += grads
-                    else:
-                        self.state['attn_out'] = grads
 
     def invert(self,
                add: Union[float, list, tuple] = 0.,
