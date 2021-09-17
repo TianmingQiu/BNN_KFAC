@@ -101,7 +101,7 @@ def kfac_diag(continue_flag):
                                                         MEANS))
     
 
-    ssd_net = build_ssd('bnn', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
+    ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
     ssd_net.load_weights(args.resume)
     ssd_net.cuda()
     net = ssd_net
@@ -169,7 +169,7 @@ def kfac_diag(continue_flag):
     def eval_unvertainty_diag(model, x, H, diag):
         threshold = 0.5
         x = Variable(x.cuda(), requires_grad=True)
-        model.cuda()
+        # model.cuda()
 
         detections = model.forward(x)
         out = torch.Tensor([[0,0,0,0,0,0]])
@@ -250,6 +250,10 @@ def kfac_diag(continue_flag):
                 h.append(torch.flatten(H_i))
         H = torch.cat(h, dim=0)
 
+        net.softmax = nn.Softmax(dim=-1)
+        net.detect = Detect()
+        net.phase = 'test'
+        net.cuda()
 
         mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
         mean_predictions = mean_predictions.detach()
