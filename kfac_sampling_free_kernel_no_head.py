@@ -4,14 +4,13 @@ from layers.functions.detection import Detect
 from data.kitti import KittiDetection
 from models.utilities import calibration_curve
 from numpy.core.fromnumeric import diagonal
-from models.curvatures import BlockDiagonal, EFB, INF, KFAC, Diagonal
+from models.curvatures import BlockDiagonal, EFB, INF, KFAC, Diagonal, KernelDiagonal
 from data import *
 from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-# DEVICE = torch.device('cuda:7')
+os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 DEVICE_LIST = [1]
 
 import sys
@@ -125,22 +124,21 @@ def kfac_diag(continue_flag):
                              False, args.cuda)
     colors = plt.cm.hsv(np.linspace(0, 1, 9)).tolist()
 
-    kfac_direc = 'weights/diag_full.obj'
+    kfac_direc = 'weights/kernel_full.obj'
     # kfac_direc = None
-    verbose = False
+    verbose = True
 
 
     if kfac_direc: 
-        print('Loading kfac...')
+        print('Loading kernel block Hessian...')
         filehandler = open(kfac_direc, 'rb') 
-        diag = pickle.load(filehandler)
-        # diag.invert(add=0.1, multiply=1)
+        kernel_block = pickle.load(filehandler)
         print('Finished!')
     else:
         # compute KFAC Fisher Information Matrix
-        diag = Diagonal(net)
+        kernel_block = KernelDiagonal(net)
 
-        for _ in range(args.start_iter, 1871):
+        for _ in range(args.start_iter, 2):
 
             images, targets = next(batch_iterator)
             images = Variable(images.cuda())
@@ -153,23 +151,24 @@ def kfac_diag(continue_flag):
             loss.backward()
             optimizer.step()
 
-            diag.update(batch_size=images.size(0))
-            if (_ + 1) % 100 == 0:
-                print('Updating iter: ', _ + 1)
+            kernel_block.update(batch_size=images.size(0))
+
+            print('Updating iter: ', _ + 1)
 
         # inversion and sampling
-        estimator = diag
+        estimator = kernel_block
 
-        # estimator.invert(add=1, multiply=2)
+        estimator.invert(add=1., multiply=5.)
 
         # saving kfac
-        file_pi = open('weights/diag_full_uninverted.obj', 'wb')
+        file_pi = open('weights/kernel_full.obj', 'wb')
         pickle.dump(estimator, file_pi)
 
-    def eval_unvertainty_diag(model, x, H, diag):
+    def eval_unvertainty_diag(model, x, H):
         threshold = 0.5
         x = Variable(x.cuda(), requires_grad=True)
         # model.cuda()
+        H = list(H.values())
 
         detections = model.forward(x)
         out = torch.Tensor([[0,0,0,0,0,0]])
@@ -185,28 +184,32 @@ def kfac_diag(continue_flag):
         uncertainties = []
         for _ in range(1,out.size(0)):
             uncertainty = []
-            for i in range(1,2):
+            for bbox_idx in range(1,2):
                 unc = 0
+                H_idx = 0
                 # retaining graph for multiple backward propagations
-                out[_,i].backward(retain_graph = True)
+                out[_,bbox_idx].backward(retain_graph = True)
 
                 # Loading all gradients from layers
                 all_grad = torch.Tensor()
+                
                 for layer in model.modules():
                     if layer in model.vgg:
                         continue
-                    if layer.__class__.__name__ in diag.layer_types:
+                    if layer.__class__.__name__ in kernel_block.layer_types:
                         if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                             grads = layer.weight.grad.contiguous().view(layer.out_channels,-1)
+                            H_layer = H[H_idx]
+                            H_idx += 1
                             for i in range(layer.out_channels):
                                 grad = grads[i].unsqueeze(0)
-                                u = grad @ H[i] @ grad.T
+                                u = grad @ H_layer[i].cuda() @ grad.T
                                 assert u.numel() == 1
                                 unc += u[0]
 
                             if layer.bias is not None:
                                 grad = layer.bias.grad.unsqueeze(0)
-                            unc += grad @ H[-1] @ grad.T
+                            unc += (grad @ H_layer[-1].cuda() @ grad.T)[0]
                 
                 uncertainty.append(unc)
             uncertainties.append(torch.FloatTensor(uncertainty))
@@ -235,29 +238,22 @@ def kfac_diag(continue_flag):
             xx = xx.cuda()
 
         if verbose:
-            plt.imshow(x)
+            # plt.imshow(x)
             # View the sampled input image before transform
             plt.figure(figsize=(10,10))
             rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             plt.imshow(rgb_image)
 
-        h = []
-        for i,layer in enumerate(list(diag.model.modules())[1:]):
-            if layer in diag.model.vgg: 
-                continue
-            if layer in diag.state:
-                H_i = diag.inv_state[layer]
-                h.append(torch.flatten(H_i))
-        H = torch.cat(h, dim=0)
 
         net.softmax = nn.Softmax(dim=-1)
         net.detect = Detect()
         net.phase = 'test'
         net.cuda()
 
-        mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
+        mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, kernel_block.inv_state)
         mean_predictions = mean_predictions.detach()
-        uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
+        # uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
+        uncertainty = (uncertainty.detach() / 24801030) ** 0.5
 
         scale = torch.Tensor(image.shape[1::-1]).repeat(2)
 
@@ -279,12 +275,13 @@ def kfac_diag(continue_flag):
                 currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
                 currentAxis.text(pt[0], pt[1], display_txt + "{:.1f}e-3".format(float(unc[0]) * 1000), bbox={'facecolor':color, 'alpha':0.5}, fontsize = 8)
 
-            # currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
-            # currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
-            # currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
-            # currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+                currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+                currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+                currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
+                currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
 
-        # plt.savefig('images/diag_no_head.png')
+        if verbose:
+            plt.savefig('images/kernel.png')
 
     toc = time.time()
     print('Average Bayesian inference duration:',  "{:.2f}s".format((toc-tic) / num_iterations))

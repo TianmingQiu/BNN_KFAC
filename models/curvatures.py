@@ -268,10 +268,17 @@ class BlockDiagonal(Curvature):
             'model': self.model,}, filename)
 
 class KernelDiagonal(Curvature):
+    r"""The diagonal Fisher information or Generalized Gauss Newton matrix approximation.
+
+    It is defined as :math:`F_{DIAG}=\mathrm{diag}(F)` with `F` being the Fisher defined in the `FISHER` class.
+    Code inspired by https://github.com/wjmaddox/swa_gaussian/blob/master/swag/posteriors/diag_laplace.py.
+
+    Source: `A Scalable Laplace Approximation for Neural Networks <https://openreview.net/pdf?id=Skdvd2xAZ>`_
+    """
+
     def update(self,
                batch_size: int,
                exclude_vgg = True):
-        # TODO: include / exclude vgg
         for layer in self.model.modules():
             if exclude_vgg and layer in self.model.vgg:
                 continue
@@ -284,10 +291,10 @@ class KernelDiagonal(Curvature):
                     grad_buffer = []
                     for grad in grads:
                         # TODO: determine whether batch_size is available
-                        grad_buffer.append(torch.ger(grad,grad) * batch_size)
+                        grad_buffer.append((torch.ger(grad,grad) * batch_size).detach().cpu())
                     if layer.bias is not None:
                         bias = torch.tensor(layer.bias)
-                        grad_buffer.append(torch.ger(bias,bias) * batch_size)
+                        grad_buffer.append((torch.ger(bias,bias) * batch_size).detach().cpu())
 
                     if layer in self.state:
                         for i in range(len(grads)):
@@ -317,11 +324,14 @@ class KernelDiagonal(Curvature):
 
     def invert(self,
                add: Union[float, list, tuple] = 0.,
-               multiply: Union[float, list, tuple] = 1.):
+               multiply: Union[float, list, tuple] = 1.,
+               exclude_vgg = True):
         assert self.state, "State dict is empty. Did you call 'update' prior to this?"
         if self.inv_state:
             Warning("State has already been inverted. Is this expected?")
         for index, (layer, values) in enumerate(self.state.items()):
+            if exclude_vgg and layer in self.model.vgg:
+                continue
             if not isinstance(add, float) and not isinstance(multiply, float):
                 assert len(add) == len(multiply) == len(self.state)
                 n, s = add[index], multiply[index]
@@ -331,7 +341,20 @@ class KernelDiagonal(Curvature):
             self.inv_state[layer] = []
             for value in values:
                 reg = torch.diag(value.new(value.shape[0]).fill_(n))
-                self.inv_state[layer].append((s * value + reg).inverse())
+                # Moving to cuda
+                reg = reg.cuda()
+                value = value.cuda()
+                value = s * value + reg
+                # Moving back to cpu
+                self.inv_state[layer].append(value.inverse().cpu())
+
+    def sample(self,
+               layer: Module) -> Tensor:
+        assert self.inv_state, "Inverse state dict is empty. Did you call 'invert' prior to this?"
+        x = self.inv_state[layer].new(self.inv_state[layer].shape[0]).normal_() @ self.inv_state[layer]
+        return torch.cat([x[:layer.weight.numel()].contiguous().view(*layer.weight.shape),
+                          torch.unsqueeze(x[layer.weight.numel():], dim=1)], dim=1)
+
 
     def save(self, filename):
         print('Writting %s\n' % filename)
