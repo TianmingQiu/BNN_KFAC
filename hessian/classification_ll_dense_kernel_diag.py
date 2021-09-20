@@ -1,6 +1,7 @@
 from re import X
 import sys
 import os
+from utils import calculateDominance
 os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 from numpy.core.function_base import add_newdoc
@@ -63,38 +64,7 @@ def plot_tensors(tensor):
     ax.imshow(tensor.cpu().numpy())
     ax.axis('off')
     ax.set_xticklabels([])
-    ax.set_yticklabels([])
-
-def generate_kernel_coords():
-    # 15080
-    coords = []
-    curr = 0
-
-    for _ in range(5):
-        coords.append(curr,curr+5*5)
-        curr += 5*5
-    coords.append(curr,curr+5)
-    curr += 5
-
-    for _ in range(10):
-        coords.append(curr,curr+5*5*5)
-        curr += 5*5*5
-    coords.append(curr,curr+10)
-    curr += 10
-
-    for _ in range(80):
-        coords.append(curr,curr+10*4*4)
-        curr += 10*4*4
-    coords.append(curr,curr+80)
-    curr += 80
-
-    for _ in range(10):
-        coords.append(curr,curr+80)
-        curr += 80
-    coords.append(curr,curr+10)
-
-    return coords
-   
+    ax.set_yticklabels([])   
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 parent = os.path.dirname(current)
@@ -153,18 +123,4 @@ for images, labels in tqdm(test_loader):
 
 H = H/len(test_loader)    
 
-diag = torch.diag(H.new(H.shape[0]).fill_(1))
-reg = H + diag * 0.00001
-coords = generate_kernel_coords()
-
-sum_diag = torch.diag(reg).abs().sum().item()
-sum_all  = reg.abs().sum().item()
-sum_block=0
-for (a,b) in coords:
-    sum_block += reg[a:b,a:b].abs().sum().item()
-
-print(f"Sum of diagonal: {sum_diag:.2f}")
-print(f"Sum of kernel diagonal: {sum_block:.2f}")
-print(f"Sum of all elements: {sum_all:.2f}")
-print(f"Diagonal Dominance: {sum_diag/sum_all:.8f} (1/{int(sum_all/sum_diag)})")
-print(f"Kernel Dominance: {sum_block/sum_all:.8f} (1/{int(sum_all/sum_block)})")
+calculateDominance(H)
