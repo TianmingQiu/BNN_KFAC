@@ -27,17 +27,19 @@ def calculateEigval(H, regParam = 0.00001):
         raise NotImplementedError
     diag = torch.diag(H.new(H.shape[0]).fill_(1))
     reg = H + diag * regParam
-    coords = generate_kernel_coords()
+    # coords = generate_kernel_coords()
 
     try:
-        eig = torch.eig(reg[:3000,:3000])[0]
+        eig = torch.eig(reg[:1000,:1000])[0].cpu()
     except:
-        eig = torch.linalg.eigvals(reg[:3000,:3000])[0]
+        eig = torch.linalg.eigvals(reg[:1000,:1000])[0].cpu()
 
     if eig[:,1].abs().max() > 1e-30:
         raise ValueError('The eigenvalues of the matrix contain imaginary parts')
     
-    plt.scatter(eig[:,0].cpu(),torch.zeros_like(eig[:,0]).cpu())
+    eig = eig[:,0]
+    plt.scatter(eig,torch.zeros_like(eig))
+    return eig.mean(),eig.std()
 
     # H_kernel = torch.zeros_like(reg)
     # for (a,b) in coords:

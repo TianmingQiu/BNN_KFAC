@@ -1,7 +1,7 @@
 from re import X
 import sys
 import os
-from utils import calculateDominance
+from utils import calculateDominance, calculateEigval
 os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 from numpy.core.function_base import add_newdoc
@@ -124,3 +124,4 @@ for images, labels in tqdm(test_loader):
 H = H/len(test_loader)    
 
 calculateDominance(H)
+torch.cuda.empty_cache()
