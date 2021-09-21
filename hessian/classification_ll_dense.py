@@ -1,7 +1,7 @@
 from re import X
 import sys
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
 
 from numpy.core.function_base import add_newdoc
 current = os.path.dirname(os.path.realpath(__file__))
@@ -23,10 +23,11 @@ from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
 
 # From the repository
-from models.wrapper import BaseNet
 from models.curvatures import BlockDiagonal, KFAC, EFB, INF
 from models.utilities import calibration_curve
-from models import plot
+from models.plot import *
+from models.net_model import *
+
 
 def get_near_psd(A, epsilon):
     C = (A + A.T)/2
@@ -55,20 +56,19 @@ def jacobian(y, x, device):
         jac[i,:] = torch.flatten(gradient(y, x, grad_outputs))
     return jac
 
-def plot_tensors(tensor):
-    if not tensor.ndim == 2:
-        raise Exception("assumes a 2D tensor")
-    fig = plt.figure(figsize=(10,10))
-    ax = fig.add_subplot(1,1,1)
-    ax.imshow(tensor.cpu().numpy())
-    ax.axis('off')
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
    
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# file path
 parent = os.path.dirname(current)
-path = parent + "/data"
+data_path = parent + "/data/"
+model_path = parent + "/theta/"
+result_path = parent + "/results/Hessian/"
+
+# choose the device
+device = "cuda" if torch.cuda.is_available() else "cpu"
+torch.manual_seed(42)
+if device == 'cuda':
+    torch.cuda.manual_seed(42) 
+
 # load and normalize MNIST
 new_mirror = 'https://ossci-datasets.s3.amazonaws.com/mnist'
 datasets.MNIST.resources = [
@@ -76,93 +76,98 @@ datasets.MNIST.resources = [
     for url, md5 in datasets.MNIST.resources
 ]
 
-train_set = datasets.MNIST(root=path,
+train_set = datasets.MNIST(root=data_path,
                                         train=True,
                                         transform=transforms.ToTensor(),
                                         download=True)
 train_loader = DataLoader(train_set, batch_size=32)
 
 # And some for evaluating/testing
-test_set = datasets.MNIST(root=path,
+test_set = datasets.MNIST(root=data_path,
                                         train=False,
                                         transform=transforms.ToTensor(),
                                         download=True)
 test_loader = DataLoader(test_set, batch_size=1)
 
-# Train the model
-net = BaseNet(lr=1e-3, epoch=3, batch_size=32, device=device)
-#net.load(models_dir + '/theta_best.dat')
-criterion = nn.CrossEntropyLoss().to(device)
-net.train(train_loader, criterion)
-sgd_predictions, sgd_labels = net.eval(test_loader)
+N = 200
+std = [i/30 for i in range(1,11)]
+H_eig = []
+H_inv_eig = []
+for i in range(10):
+    print(f"std: {std[i]}")
+    # Train the model
+    net = BaseNet_750()
+    net.weight_init(std[i])
+    if device == 'cuda': 
+        net.to(torch.device('cuda'))
+    get_nb_parameters(net)
+    criterion = torch.nn.CrossEntropyLoss().to(device)
+    optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+    train(net, device, train_loader, criterion, optimizer, epochs=3)
+    # save(net, model_path + 'BaseNet_15k.dat')
+    # load(net, model_path + 'BaseNet_750.dat')
 
-print(f"MAP Accuracy: {100 * np.mean(np.argmax(sgd_predictions.cpu().numpy(), axis=1) == sgd_labels.numpy()):.2f}%")
+    # run on the testset
+    sgd_predictions, sgd_labels = eval(net, device, test_loader)
+    accuracy(sgd_predictions, sgd_labels)
+
+    # update likelihood FIM
+    H = None
+    for images, labels in tqdm(test_loader):
+        logits = net(images.to(device))
+        dist = torch.distributions.Categorical(logits=logits)
+        # A rank-1 Kronecker factored FiM approximation.
+        labels = dist.sample()
+        loss = criterion(logits, labels)
+        net.zero_grad()
+        loss.backward()
+                
+        grads = []
+        for layer in list(net.modules())[1:]:
+            for p in layer.parameters():    
+                J_p = torch.flatten(p.grad.view(-1)).unsqueeze(0)
+                grads.append(J_p)
+        J_loss = torch.cat(grads, dim=1)
+        H_loss = J_loss.t() @ J_loss
+        H_loss.requires_grad = False
+        H = H_loss if H == None else H + H_loss
+
+    H = H/len(test_loader) 
+
+    #calculate the pseudo inverse of H
+    diag = torch.diag(H.new(H.shape[0]).fill_(std[i]))
+    H_inv = torch.linalg.pinv(N * H + diag).cpu()
+    
+    # calculate the eigenvalues
+    eig = torch.linalg.eigvals(H).real
+    eig_inv = torch.linalg.eigvals(H_inv).real
+    print(f"Maximum Eigenvalue of H: {eig.max().item()}")
+    print(f"Maximum Eigenvalue of H_inv: {eig_inv.max().item()}")
+    H_eig.append(eig)
+    H_inv_eig.append(eig_inv)
+
+H_eig_min = []
+H_inv_eig_max = []
+for i in range(10):
+    H_eig_min.append(H_eig[i].min().item())
+    H_inv_eig_max.append(H_inv_eig[i].max().item())
 
 
+# plot the results
+plt.figure(figsize=(5,5))
+plt.plot(np.log(np.array(std)**2), np.array(H_eig_min), label='Hessian')   
+plt.title('Minimum Eigenvalue of the Hessian Matrix')
+plt.xlabel('log(tau)')
+plt.ylabel('eigenvalue')
+plt.legend()
+plt.tight_layout()
+plt.show()
 
-# update likelihood FIM
-H = None
-for images, labels in tqdm(test_loader):
-    logits = net.model(images.to(device))
-    dist = torch.distributions.Categorical(logits=logits)
-    # A rank-1 Kronecker factored FiM approximation.
-    labels = dist.sample()
-    loss = criterion(logits, labels)
-    net.model.zero_grad()
-    loss.backward()
-            
-    grads = []
-    for layer in list(net.model.modules())[1:]:
-        for p in layer.parameters():    
-            J_p = torch.flatten(p.grad.view(-1)).unsqueeze(0)
-            grads.append(J_p)
-    J_loss = torch.cat(grads, dim=1)
-    H_loss = J_loss.t() @ J_loss
-    H_loss.requires_grad = False
-    H = H_loss if H == None else H + H_loss
-
-H = H/len(test_loader)    
-
-
-# inversion of H
-add = 1
-multiply = 200
-diag = torch.diag(H.new(H.shape[0]).fill_(add ** 0.5))
-reg = multiply ** 0.5 * H + diag
-H_inv = torch.inverse(reg).cpu()
-
-
-sum_diag = torch.diag(H_inv).abs().sum().item()
-sum_non_diag = torch.abs(H_inv-torch.diag(torch.diag(H_inv))).sum()
-print(f"sum of diagonal: {sum_diag:.2f}")
-print(f"sum of non-diagonal: {sum_non_diag:.2f}")
-
-min = H_inv.abs().min().item()
-max = H_inv.abs().max().item()
-H_norm = (H_inv.abs() - min) / (max-min)
-
-PIL_image = Image.fromarray(np.uint8(255*torch.sqrt(H_norm[:3000,:3000]).numpy())).convert('RGB')
-PIL_image.save(parent+'/results/H_inv_15k_sqrt.png')
-
-
-'''
-ax1 = sns.heatmap(H_norm.cpu().numpy(), vmin=0, vmax=1)
-fig1 = ax1.get_figure()
-fig1.savefig(parent+'/results/H_inv_15k_heatmap.png')
- 
-ax2 = transforms.ToPILImage()(H_norm)
-ax2 = PIL.ImageOps.invert(ax2)
-ax2.save(parent+'/results/H_inv_15k.png')
-'''
-
-'''
-748
-H_inv
-sum of diagonal: 605.26
-sum of non-diagonal: 1609.85
-
-15080
-H_inv 
-sum of diagonal: 14879.16
-sum of non-diagonal: 63296.37
-'''
+plt.figure(figsize=(5,5))
+plt.plot(np.log(np.array(std)**2), np.array(H_inv_eig_max), label='Inverse of Hessian')   
+plt.title('Maximum Eigenvalue of the Inverse Hessian Matrix')
+plt.xlabel('log(tau)')
+plt.ylabel('eigenvalue')
+plt.legend()
+plt.tight_layout()
+plt.show()
