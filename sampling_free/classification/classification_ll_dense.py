@@ -2,11 +2,18 @@ from re import X
 import sys
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(os.path.dirname(current))
 sys.path.append(parent)
+
+from inspect import getsourcefile
+current_path = os.path.abspath(getsourcefile(lambda:0))
+current_dir = os.path.dirname(current_path)
+parent_dir = current_dir[:current_dir.rfind(os.path.sep)]
+sys.path.insert(0, parent_dir)
+import utils
 
 # Standard imports
 import numpy as np
@@ -27,13 +34,6 @@ from models.curvatures import BlockDiagonal, KFAC, EFB, INF
 from models.utilities import *
 from models.plot import *
 from models.wrapper import *
-   
-def tensor_to_image(tensor):
-    min = tensor.min().item()
-    max = tensor.max().item()
-    norm = (tensor - min) / (max-min)
-    image = Image.fromarray(np.uint8(255*torch.sqrt(norm).cpu().numpy())).convert('RGB')
-    return image
 
 # file path
 parent = os.path.dirname(os.path.dirname(current))
@@ -103,11 +103,10 @@ for images, labels in tqdm(train_loader):
     H_loss = J_loss.t() @ J_loss
     H_loss.requires_grad = False
     H = H_loss if H == None else H + H_loss
+         
+H = H.cpu()/len(train_loader) 
 
-torch.cuda.empty_cache()           
-H = H/len(train_loader) 
-
-diag = torch.diag((std**2) * torch.ones(H.shape[0])).to(device)
+diag = torch.diag((std**2) * torch.ones(H.shape[0]))
 H_inv = torch.pinverse(H + diag)
 
 H_diag = torch.diag(H)
@@ -117,18 +116,20 @@ mean_dense = torch.diag(H_inv).abs().sum().item()
 mean_diag = H_inv_diag.abs().sum().item()
 H_inv_diag_norm = H_inv_diag * mean_dense / mean_diag
 
-'''
+min = H_inv.abs().min().item()
+max = H_inv.abs().max().item()
+scale = max - min 
 
-image_inv = tensor_to_image(H_inv.abs())
-image_inv.save(result_path+'images/H_inv_15k_dense.png')
+image_inv = utils.tensor_to_image(H_inv.abs(), scale=scale)
+image_inv.save(result_path+'images/H_inv_750_dense.png')
 
-image_inv_diag = tensor_to_image(H_inv_diag.abs())
-image_inv_diag.save(result_path+'images/H_inv_15k_diag.png')
+image_inv_diag = utils.tensor_to_image(H_inv_diag.abs(), scale=scale)
+image_inv_diag.save(result_path+'images/H_inv_750_diag.png')
 
-image_error = tensor_to_image(torch.abs(H_inv-H_inv_diag_norm))
-image_error.save(result_path+'images/error_15k.png')
-'''
-torch.save(H, result_path+'tensor/H_dense_15k.pt')
-torch.save(H_inv, result_path+'tensor/H_inv_dense_15k.pt')
-torch.save(H_inv_diag, result_path+'tensor/H_inv_diag_15k.pt')
+image_error = utils.tensor_to_image(torch.abs(H_inv-H_inv_diag_norm), scale=scale)
+image_error.save(result_path+'images/error_750.png')
 
+torch.save(H, result_path+'tensor/H_dense_750.pt')
+torch.save(H_inv, result_path+'tensor/H_inv_dense_750.pt')
+torch.save(H_inv_diag, result_path+'tensor/H_inv_diag_750.pt')
+torch.save(H_inv_diag_norm, result_path+'tensor/H_inv_diag_norm_750.pt')
