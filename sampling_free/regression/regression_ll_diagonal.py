@@ -113,7 +113,7 @@ for i,layer in enumerate(list(estimator.model.modules())[1:]):
     if layer in estimator.state:
         H_i = estimator.inv_state[layer]
         h.append(torch.flatten(H_i))
-H = torch.cat(h, dim=0)
+H_inv = torch.cat(h, dim=0)
 
 
 x_ = torch.unsqueeze(torch.linspace(-6, 6), dim=1)  # x data (tensor), shape=(100, 1)
@@ -128,7 +128,7 @@ for j,x_j in enumerate(x_):
     for p in net.parameters():    
         g.append(torch.flatten(jacobian(pred_j, p)))
     J = torch.cat(g, dim=0).unsqueeze(0)  #shape (64, 32*in_channels, 224, 224)
-    std.append(torch.abs(J * H * J).sum() ** 0.5 + sigma)
+    std.append(torch.abs(J * H_inv * J).sum() ** 0.5 + sigma)
 
 
 pred_mean = net.forward(x_).data.numpy().squeeze(1)
@@ -148,7 +148,7 @@ plt.xlabel('$x$', fontsize=15)
 plt.ylabel('$y$', fontsize=15)
 plt.legend()
 plt.xlim([-6, 6])
-plt.ylim([-800, 800])
+plt.ylim([-400, 400])
 plt.gca().yaxis.grid(alpha=0.3)
 plt.gca().xaxis.grid(alpha=0.3)
 plt.tick_params(labelsize=10)
