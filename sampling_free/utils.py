@@ -73,6 +73,18 @@ def generate_kernel_diag_748(H, tau = 0):
 
     return res, torch.inverse(res)
 
+def generate_kernel_diag_141(H, tau = 0):
+    if H.numel() != 141 ** 2:
+        raise NotImplementedError
+    res = torch.zeros_like(H)
+    diag = torch.diag(H.new(H.shape[0]).fill_(1))
+    H += diag * tau
+    for (a,b) in generate_kernel_coords_141():
+        res[a:b,a:b] = H[a:b,a:b]
+
+    return res, torch.inverse(res)
+
+
 def generate_kernel_coords_15k():
     # 15080
     coords = []
