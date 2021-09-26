@@ -38,7 +38,7 @@ def tensor_to_image(tensor):
     return image
 
 # file path
-parent = os.path.dirname(current)
+parent = os.path.dirname(os.path.dirname(current))
 data_path = parent + "/data/"
 model_path = parent + "/theta/"
 result_path = parent + "/results/Hessian/"
@@ -82,7 +82,7 @@ criterion = torch.nn.CrossEntropyLoss().to(device)
 optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 # train(net, device, train_loader, criterion, optimizer, epochs=10)
 # save(net, model_path + 'BaseNet_750.dat')
-load(net, model_path + 'BaseNet_750.dat')
+load(net, model_path + 'BaseNet_15k.dat')
 
 # run on the testset
 sgd_predictions, sgd_labels = eval(net, device, test_loader)
@@ -115,16 +115,19 @@ H_inv = torch.linalg.pinv(N * H + diag)
 H_diag = torch.diag(H)
 H_inv_diag = torch.diag(torch.reciprocal(N * H_diag + std * torch.ones(H.shape[0])))
 
+mean_dense = torch.diag(H_inv).abs().sum().item()
+mean_diag = H_inv_diag.abs().sum().item()
+H_inv_diag_norm = H_inv_diag * mean_dense / mean_diag
 
 image_inv = tensor_to_image(H_inv.abs())
-image_inv.save(result_path+'750/H_inv_750_dense.png')
+image_inv.save(result_path+'images/H_inv_15k_dense.png')
 
 image_inv_diag = tensor_to_image(H_inv_diag.abs())
-image_inv_diag.save(result_path+'750/H_inv_750_diag.png')
+image_inv_diag.save(result_path+'images/H_inv_15k_diag.png')
 
-image_error = tensor_to_image(torch.abs(H_inv-H_inv_diag))
-image_error.save(result_path+'750/error_750.png')
+image_error = tensor_to_image(torch.abs(H_inv-H_inv_diag_norm))
+image_error.save(result_path+'images/error_15k.png')
 
-torch.save(H, result_path+'H_dense_750.pt')
-torch.save(H_inv, result_path+'H_inv_dense_750.pt')
-torch.save(H_inv_diag, result_path+'H_inv_diag_750.pt')
+torch.save(H, result_path+'tensor/H_dense_15k.pt')
+torch.save(H_inv, result_path+'tensor/H_inv_dense_15k.pt')
+torch.save(H_inv_diag, result_path+'tensor/H_inv_diag_15k.pt')
