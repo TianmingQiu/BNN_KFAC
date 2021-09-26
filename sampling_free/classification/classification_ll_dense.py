@@ -129,7 +129,15 @@ image_inv_diag.save(result_path+'images/H_inv_750_diag.png')
 image_error = utils.tensor_to_image(torch.abs(H_inv-H_inv_diag_norm), scale=scale)
 image_error.save(result_path+'images/error_750.png')
 
+'''
+
 torch.save(H, result_path+'tensor/H_dense_750.pt')
 torch.save(H_inv, result_path+'tensor/H_inv_dense_750.pt')
 torch.save(H_inv_diag, result_path+'tensor/H_inv_diag_750.pt')
 torch.save(H_inv_diag_norm, result_path+'tensor/H_inv_diag_norm_750.pt')
+
+H = torch.load(result_path+'tensor/H_dense_15k.pt')
+H_inv = torch.load(result_path+'tensor/H_inv_dense_15k.pt')
+H_inv_diag = torch.load(result_path+'tensor/H_inv_diag_15k.pt')
+H_inv_diag_norm = torch.load(result_path+'tensor/H_inv_diag_norm_15k.pt')
+'''
