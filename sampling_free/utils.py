@@ -127,6 +127,30 @@ def generate_kernel_coords_748():
 
     return coords
 
+def generate_kernel_coords_141():
+
+    coords = []
+    curr = 0
+
+    for _ in range(10):
+        coords.append((curr,curr+1))
+        curr += 1
+    coords.append((curr,curr+10))
+    curr += 10
+
+    for _ in range(10):
+        coords.append((curr,curr+10))
+        curr += 10
+    coords.append((curr,curr+10))
+    curr += 10
+
+    for _ in range(1):
+        coords.append((curr,curr+10))
+        curr += 10
+    coords.append((curr,curr+1))
+
+    return coords
+
 def get_near_psd(A, epsilon):
     C = (A + A.T)/2
     eigval, eigvec = torch.linalg.eig(C.to(torch.double))
