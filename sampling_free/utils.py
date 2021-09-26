@@ -1,5 +1,7 @@
 import torch
 from matplotlib import pyplot as plt
+from PIL import Image, ImageOps  
+import numpy as np
 
 def calculateDominance(H, tau = 0.00001):
     if H.numel() != 15080 ** 2:
@@ -40,18 +42,6 @@ def calculateEigval(H, regParam = 0.00001):
     eig = eig[:,0]
     plt.scatter(eig,torch.zeros_like(eig))
     return eig.mean(),eig.std()
-
-    # H_kernel = torch.zeros_like(reg)
-    # for (a,b) in coords:
-    #     H_kernel[a:b,a:b] = reg[a:b,a:b]
-    # try:
-    #     eig_k = torch.eig(H_kernel[:3000,:3000])
-    # except:
-    #     eig_k = torch.linalg.eigvals(H_kernel)
-
-    # H_kernel = torch.zeros_like(reg)
-    # for (a,b) in coords:
-    #     H_kernel[a:b,a:b] = reg[a:b,a:b]
 
 def generate_diag(H, tau = 0):
     diag = torch.diag(tau * torch.ones(H.shape[0]))
@@ -172,3 +162,13 @@ def plot_tensors(tensor):
     ax.axis('off')
     ax.set_xticklabels([])
     ax.set_yticklabels([])   
+
+def tensor_to_image(tensor,scale = -1):
+    min = tensor.min().item()
+    max = tensor.max().item()
+    if scale == -1:
+        norm = (tensor - min) / (max-min)
+    else:
+        norm = (tensor - min) / scale
+    image = Image.fromarray(np.uint8(255*torch.sqrt(norm).numpy())).convert('RGB')
+    return image

@@ -20,7 +20,6 @@ import numpy as np
 from tqdm import tqdm
 import seaborn as sns
 from matplotlib import pyplot as plt
-from PIL import Image, ImageOps  
 
 import torch
 import torch.nn as nn
@@ -34,16 +33,6 @@ from models.curvatures import BlockDiagonal, KFAC, EFB, INF
 from models.utilities import *
 from models.plot import *
 from models.wrapper import *
-   
-def tensor_to_image(tensor,scale = -1):
-    min = tensor.min().item()
-    max = tensor.max().item()
-    if scale == -1:
-        norm = (tensor - min) / (max-min)
-    else:
-        norm = (tensor - min) / scale
-    image = Image.fromarray(np.uint8(255*torch.sqrt(norm).numpy())).convert('RGB')
-    return image
 
 # file path
 # parent = os.path.dirname(current)
@@ -121,11 +110,11 @@ H = H.cpu()/len(train_loader)
 orig,   orig_inv    = utils.generate_diag(H, tau)
 kernel, kernel_inv  = utils.generate_kernel_diag_748(H, tau)
 
-image_inv_diag = tensor_to_image(kernel_inv.abs())
+image_inv_diag = utils.tensor_to_image(kernel_inv.abs())
 image_inv_diag.save(result_path+'H_inv_750_kernel.png')
 
 scale = kernel_inv.abs().max()
-image_error = tensor_to_image(torch.abs(orig_inv-kernel_inv),scale)
+image_error = utils.tensor_to_image(torch.abs(orig_inv-kernel_inv),scale)
 image_error.save(result_path+'error_kernel_750.png')
 
 # torch.save(H, result_path+'H_dense_750.pt')
