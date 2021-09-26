@@ -6,6 +6,7 @@ data/*
 weights/*
 ; images/*
 scripts/*
+sampling_free/data/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

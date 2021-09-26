@@ -1,13 +1,15 @@
 from re import X
 import sys
 import os
-from utils import calculateDominance, calculateEigval
 os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
-from numpy.core.function_base import add_newdoc
-current = os.path.dirname(os.path.realpath(__file__))
-parent = os.path.dirname(current)
-sys.path.append(parent)
+from inspect import getsourcefile
+current_path = os.path.abspath(getsourcefile(lambda:0))
+current_dir = os.path.dirname(current_path)
+parent_dir = current_dir[:current_dir.rfind(os.path.sep)]
+sys.path.insert(0, parent_dir)
+
+import utils
 
 # Standard imports
 import numpy as np
@@ -86,5 +88,5 @@ for images, labels in tqdm(test_loader):
 
 H = H/len(test_loader)    
 
-calculateDominance(H)
+utils.calculateDominance(H)
 torch.cuda.empty_cache()
