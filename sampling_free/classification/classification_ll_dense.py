@@ -2,10 +2,8 @@ from re import X
 import sys
 import os
 
-from torch._C import _has_torch_function_variadic
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 
-from numpy.core.function_base import add_newdoc
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(os.path.dirname(current))
 sys.path.append(parent)
@@ -34,11 +32,11 @@ def tensor_to_image(tensor):
     min = tensor.min().item()
     max = tensor.max().item()
     norm = (tensor - min) / (max-min)
-    image = Image.fromarray(np.uint8(255*torch.sqrt(norm).numpy())).convert('RGB')
+    image = Image.fromarray(np.uint8(255*torch.sqrt(norm).cpu().numpy())).convert('RGB')
     return image
 
 # file path
-parent = os.path.dirname(current)
+parent = os.path.dirname(os.path.dirname(current))
 data_path = parent + "/data/"
 model_path = parent + "/theta/"
 result_path = parent + "/results/Hessian/"
@@ -69,11 +67,10 @@ test_set = datasets.MNIST(root=data_path,
                                         download=True)
 test_loader = DataLoader(test_set, batch_size=256)
 
-N = 200
-std = 0.1
+std = 0.2
 
 # Train the model
-net = BaseNet_750()
+net = BaseNet_15k()
 net.weight_init(std)
 if device == 'cuda': 
     net.to(torch.device('cuda'))
@@ -82,7 +79,7 @@ criterion = torch.nn.CrossEntropyLoss().to(device)
 optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 # train(net, device, train_loader, criterion, optimizer, epochs=10)
 # save(net, model_path + 'BaseNet_750.dat')
-load(net, model_path + 'BaseNet_750.dat')
+load(net, model_path + 'BaseNet_15k.dat')
 
 # run on the testset
 sgd_predictions, sgd_labels = eval(net, device, test_loader)
@@ -106,25 +103,32 @@ for images, labels in tqdm(train_loader):
     H_loss = J_loss.t() @ J_loss
     H_loss.requires_grad = False
     H = H_loss if H == None else H + H_loss
-            
-H = H.cpu()/len(train_loader) 
 
-diag = torch.diag(std * torch.ones(H.shape[0]))
-H_inv = torch.linalg.pinv(N * H + diag)
+torch.cuda.empty_cache()           
+H = H/len(train_loader) 
+
+diag = torch.diag((std**2) * torch.ones(H.shape[0])).to(device)
+H_inv = torch.pinverse(H + diag)
 
 H_diag = torch.diag(H)
-H_inv_diag = torch.diag(torch.reciprocal(N * H_diag + std * torch.ones(H.shape[0])))
+H_inv_diag = torch.diag(torch.reciprocal(H_diag + (std**2) * torch.ones(H.shape[0])))
 
+mean_dense = torch.diag(H_inv).abs().sum().item()
+mean_diag = H_inv_diag.abs().sum().item()
+H_inv_diag_norm = H_inv_diag * mean_dense / mean_diag
+
+'''
 
 image_inv = tensor_to_image(H_inv.abs())
-image_inv.save(result_path+'750/H_inv_750_dense.png')
+image_inv.save(result_path+'images/H_inv_15k_dense.png')
 
 image_inv_diag = tensor_to_image(H_inv_diag.abs())
-image_inv_diag.save(result_path+'750/H_inv_750_diag.png')
+image_inv_diag.save(result_path+'images/H_inv_15k_diag.png')
 
-image_error = tensor_to_image(torch.abs(H_inv-H_inv_diag))
-image_error.save(result_path+'750/error_750.png')
+image_error = tensor_to_image(torch.abs(H_inv-H_inv_diag_norm))
+image_error.save(result_path+'images/error_15k.png')
+'''
+torch.save(H, result_path+'tensor/H_dense_15k.pt')
+torch.save(H_inv, result_path+'tensor/H_inv_dense_15k.pt')
+torch.save(H_inv_diag, result_path+'tensor/H_inv_diag_15k.pt')
 
-torch.save(H, result_path+'H_dense_750.pt')
-torch.save(H_inv, result_path+'H_inv_dense_750.pt')
-torch.save(H_inv_diag, result_path+'H_inv_diag_750.pt')
