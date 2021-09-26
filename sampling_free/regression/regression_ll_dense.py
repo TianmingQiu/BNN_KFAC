@@ -47,7 +47,8 @@ class Net(torch.nn.Module):
             elif layer.__class__.__name__ == 'MultiheadAttention':
                 raise NotImplementedError
 
-
+def get_nb_parameters(model):
+    print('Total params: %.2fK' % (np.sum(p.numel() for p in model.parameters()) / 1000.0))
 
 # backward Jacobian: derivative of outputs with respect to weights
 def gradient(y, x, grad_outputs=None):
@@ -79,7 +80,7 @@ result_path = parent + "/results/Regression/"
 torch.manual_seed(2)    # reproducible
 
 # initialize data
-std = 0.03
+std = 0.2
 N = 30
 sigma = 0.2
 x = torch.FloatTensor(30, 1).uniform_(-4, 4).sort(dim=0).values # random x data (tensor), shape=(20, 1)
@@ -150,10 +151,10 @@ plt.xlabel('$x$', fontsize=15)
 plt.ylabel('$y$', fontsize=15)
 plt.legend()
 plt.xlim([-6, 6])
+plt.ylim([-800, 800])
 plt.gca().yaxis.grid(alpha=0.3)
 plt.gca().xaxis.grid(alpha=0.3)
-plt.tick_params(labelsize=10)
-plt.show()   
+plt.tick_params(labelsize=10) 
 plt.savefig(result_path+'dense.png', format='png', bbox_inches = 'tight')
-plt.savefig(result_path+'dense.eps', format='eps', bbox_inches = 'tight')
+#plt.savefig(result_path+'dense.eps', format='eps', bbox_inches = 'tight')
 
