@@ -6,7 +6,7 @@ def calculateDominance(H, tau = 0.00001):
         raise NotImplementedError
     diag = torch.diag(H.new(H.shape[0]).fill_(1))
     reg = H + diag * tau
-    coords = generate_kernel_coords()
+    coords = generate_kernel_coords_15k()
 
     sum_diag = torch.diag(reg).abs().sum().item()
     sum_all  = reg.abs().sum().item()
@@ -59,12 +59,12 @@ def generate_kernel_diag(H, tau = 0):
     res = torch.zeros_like(H)
     diag = torch.diag(H.new(H.shape[0]).fill_(1))
     H += diag * tau
-    for (a,b) in generate_kernel_coords():
+    for (a,b) in generate_kernel_coords_15k():
         res[a:b,a:b] = H[a:b,a:b]
 
     return res
 
-def generate_kernel_coords():
+def generate_kernel_coords_15k():
     # 15080
     coords = []
     curr = 0
@@ -90,6 +90,30 @@ def generate_kernel_coords():
     for _ in range(10):
         coords.append((curr,curr+80))
         curr += 80
+    coords.append((curr,curr+10))
+
+    return coords
+
+def generate_kernel_coords_748():
+
+    coords = []
+    curr = 0
+
+    for _ in range(3):
+        coords.append((curr,curr+3*3))
+        curr += 3*3
+    coords.append((curr,curr+3))
+    curr += 3
+
+    for _ in range(6):
+        coords.append((curr,curr+3*3*3))
+        curr += 3*3*3
+    coords.append((curr,curr+6))
+    curr += 6
+
+    for _ in range(10):
+        coords.append((curr,curr+50))
+        curr += 50
     coords.append((curr,curr+10))
 
     return coords
