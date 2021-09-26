@@ -1,6 +1,11 @@
 # virtual environment
 venv_bnn_kfac/
 data/*
+.venv_kfac/
+
+weights/*
+; images/*
+scripts/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
