@@ -29,43 +29,6 @@ from models.curvatures import BlockDiagonal, KFAC, EFB, INF
 from models.utilities import calibration_curve
 from models import plot
 
-def get_near_psd(A, epsilon):
-    C = (A + A.T)/2
-    eigval, eigvec = torch.linalg.eig(C.to(torch.double))
-    eigval[eigval.real < epsilon] = epsilon
-    return eigvec @ (torch.diag(eigval)) @ eigvec.t()
-
-
-def gradient(y, x, grad_outputs=None):
-    """Compute dy/dx @ grad_outputs"""
-    if grad_outputs is None:
-        grad_outputs = torch.ones_like(y)
-    grad = torch.autograd.grad(y, [x], grad_outputs = grad_outputs, create_graph=True, retain_graph=True, allow_unused=True)[0]
-    return grad
-
-def jacobian(y, x, device):
-    '''
-    Compute dy/dx = dy/dx @ grad_outputs; 
-    y: output, batch_size * class_number
-    x: parameter
-    '''
-    jac = torch.zeros(y.shape[1], torch.flatten(x).shape[0]).to(device)
-    for i in range(y.shape[1]):
-        grad_outputs = torch.zeros_like(y)
-        grad_outputs[:,i] = 1
-        jac[i,:] = torch.flatten(gradient(y, x, grad_outputs))
-    return jac
-
-def plot_tensors(tensor):
-    if not tensor.ndim == 2:
-        raise Exception("assumes a 2D tensor")
-    fig = plt.figure(figsize=(10,10))
-    ax = fig.add_subplot(1,1,1)
-    ax.imshow(tensor.cpu().numpy())
-    ax.axis('off')
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])   
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
 parent = os.path.dirname(current)
 path = parent + "/data"

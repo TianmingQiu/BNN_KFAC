@@ -1,11 +1,11 @@
 import torch
 from matplotlib import pyplot as plt
 
-def calculateDominance(H, regParam = 0.00001):
+def calculateDominance(H, tau = 0.00001):
     if H.numel() != 15080 ** 2:
         raise NotImplementedError
     diag = torch.diag(H.new(H.shape[0]).fill_(1))
-    reg = H + diag * regParam
+    reg = H + diag * tau
     coords = generate_kernel_coords()
 
     sum_diag = torch.diag(reg).abs().sum().item()
@@ -53,8 +53,16 @@ def calculateEigval(H, regParam = 0.00001):
     # for (a,b) in coords:
     #     H_kernel[a:b,a:b] = reg[a:b,a:b]
 
+def generate_kernel_diag(H, tau = 0):
+    if H.numel() != 15080 ** 2:
+        raise NotImplementedError
+    res = torch.zeros_like(H)
+    diag = torch.diag(H.new(H.shape[0]).fill_(1))
+    H += diag * tau
+    for (a,b) in generate_kernel_coords():
+        res[a:b,a:b] = H[a:b,a:b]
 
-
+    return res
 
 def generate_kernel_coords():
     # 15080
@@ -86,3 +94,39 @@ def generate_kernel_coords():
 
     return coords
 
+def get_near_psd(A, epsilon):
+    C = (A + A.T)/2
+    eigval, eigvec = torch.linalg.eig(C.to(torch.double))
+    eigval[eigval.real < epsilon] = epsilon
+    return eigvec @ (torch.diag(eigval)) @ eigvec.t()
+
+
+def gradient(y, x, grad_outputs=None):
+    """Compute dy/dx @ grad_outputs"""
+    if grad_outputs is None:
+        grad_outputs = torch.ones_like(y)
+    grad = torch.autograd.grad(y, [x], grad_outputs = grad_outputs, create_graph=True, retain_graph=True, allow_unused=True)[0]
+    return grad
+
+def jacobian(y, x, device):
+    '''
+    Compute dy/dx = dy/dx @ grad_outputs; 
+    y: output, batch_size * class_number
+    x: parameter
+    '''
+    jac = torch.zeros(y.shape[1], torch.flatten(x).shape[0]).to(device)
+    for i in range(y.shape[1]):
+        grad_outputs = torch.zeros_like(y)
+        grad_outputs[:,i] = 1
+        jac[i,:] = torch.flatten(gradient(y, x, grad_outputs))
+    return jac
+
+def plot_tensors(tensor):
+    if not tensor.ndim == 2:
+        raise Exception("assumes a 2D tensor")
+    fig = plt.figure(figsize=(10,10))
+    ax = fig.add_subplot(1,1,1)
+    ax.imshow(tensor.cpu().numpy())
+    ax.axis('off')
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])   
