@@ -107,7 +107,7 @@ for images, labels in tqdm(train_loader):
             
 H = H.cpu()/len(train_loader) 
 
-orig,   orig_inv    = utils.generate_diag(H, tau)
+orig,   orig_inv    = utils.generate_H(H, tau)
 kernel, kernel_inv  = utils.generate_kernel_diag_748(H, tau)
 
 image_inv_diag = utils.tensor_to_image(kernel_inv.abs())

@@ -44,11 +44,24 @@ def calculateEigval(H, regParam = 0.00001):
     return eig.mean(),eig.std()
 
 def generate_diag(H, tau = 0):
+    H_diag = torch.diag(H) + tau
+    inv = torch.reciprocal(H_diag)
+    return torch.diag(H_diag), torch.diag(inv)
+
+def generate_H(H, tau = 0):
     diag = torch.diag(tau * torch.ones(H.shape[0]))
     try:
         H_inv = torch.linalg.pinv(H + diag)
     except:
         H_inv = torch.pinverse(H + diag)
+    return H + diag, H_inv
+
+def generate_H_true(H, tau = 0):
+    diag = torch.diag(tau * torch.ones(H.shape[0]))
+    try:
+        H_inv = torch.inverse(H + diag)
+    except:
+        raise ValueError('H + tau*eye not invertible!')
     return H + diag, H_inv
 
 def generate_kernel_diag_15080(H, tau = 0):
@@ -83,7 +96,6 @@ def generate_kernel_diag_141(H, tau = 0):
         res[a:b,a:b] = H[a:b,a:b]
 
     return res, torch.inverse(res)
-
 
 def generate_kernel_coords_15k():
     # 15080
