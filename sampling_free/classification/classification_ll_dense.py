@@ -70,16 +70,16 @@ test_loader = DataLoader(test_set, batch_size=256)
 std = 0.2
 
 # Train the model
-net = BaseNet_15k()
-net.weight_init(std)
+net = BaseNet_750()
+net.weight_init_gaussian(std)
 if device == 'cuda': 
     net.to(torch.device('cuda'))
 get_nb_parameters(net)
 criterion = torch.nn.CrossEntropyLoss().to(device)
 optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-# train(net, device, train_loader, criterion, optimizer, epochs=10)
+train(net, device, train_loader, criterion, optimizer, epochs=10)
 # save(net, model_path + 'BaseNet_750.dat')
-load(net, model_path + 'BaseNet_15k.dat')
+# load(net, model_path + 'BaseNet_750.dat')
 
 # run on the testset
 sgd_predictions, sgd_labels = eval(net, device, test_loader)

@@ -98,7 +98,7 @@ for i in range(10):
     print(f"std: {std[i]}")
     # Train the model
     net = BaseNet_750()
-    net.weight_init(std[i])
+    net.weight_init_gaussian(std[i])
     if device == 'cuda': 
         net.to(torch.device('cuda'))
     get_nb_parameters(net)

@@ -65,11 +65,20 @@ class BaseNet_750(nn.Module):
         x = self.fc1(x)       
         return x
 
-    def weight_init(self, std):
+    def weight_init_gaussian(self, std):
         for layer in self.modules():   
             if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                 init.normal_(layer.weight, 0, std)
-            # bias.data should be 0
+                # bias.data should be 0
+                layer.bias.data.fill_(0)
+            elif layer.__class__.__name__ == 'MultiheadAttention':
+                raise NotImplementedError
+
+    def weight_init_uniform(self, lim):
+        for layer in self.modules():   
+            if layer.__class__.__name__ in ['Linear', 'Conv2d']:
+                init.uniform_(layer.weight, -lim, lim)
+                # bias.data should be 0
                 layer.bias.data.fill_(0)
             elif layer.__class__.__name__ == 'MultiheadAttention':
                 raise NotImplementedError
@@ -95,7 +104,16 @@ class BaseNet_15k(nn.Module):
         for layer in self.modules():   
             if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                 init.normal_(layer.weight, 0, std)
-            # bias.data should be 0
+                # bias.data should be 0
+                layer.bias.data.fill_(0)
+            elif layer.__class__.__name__ == 'MultiheadAttention':
+                raise NotImplementedError
+
+    def weight_init_uniform(self, lim):
+        for layer in self.modules():   
+            if layer.__class__.__name__ in ['Linear', 'Conv2d']:
+                init.uniform_(layer.weight, -lim, lim)
+                # bias.data should be 0
                 layer.bias.data.fill_(0)
             elif layer.__class__.__name__ == 'MultiheadAttention':
                 raise NotImplementedError
