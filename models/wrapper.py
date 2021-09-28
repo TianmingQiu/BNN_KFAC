@@ -100,7 +100,7 @@ class BaseNet_15k(nn.Module):
         x = self.fc2(x)
         return x
 
-    def weight_init(self, std):
+    def weight_init_gaussian(self, std):
         for layer in self.modules():   
             if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                 init.normal_(layer.weight, 0, std)
