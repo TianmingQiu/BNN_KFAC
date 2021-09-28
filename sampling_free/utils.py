@@ -220,3 +220,19 @@ def tensor_to_image(tensor,scale = -1):
         norm = (tensor - min) / scale
     image = Image.fromarray(np.uint8(255*torch.sqrt(norm).numpy())).convert('RGB')
     return image
+
+def plot_lambda(H, values):
+    # Tikhonov regularization
+    def calculateDiff(a,b):
+        return (b-a).abs().sum() / b.abs().sum()
+
+    val = []
+    idx = []
+    for v in values:
+        a,b = generate_H_true(H,v)
+        c,d = generate_diag(H,v)
+        val.append(calculateDiff(b,d))
+        idx.append(v)
+
+    plt.yscale('log')
+    plt.plot(idx,val)

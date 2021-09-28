@@ -71,7 +71,8 @@ std = 0.2
 
 # Train the model
 net = BaseNet_750()
-net.weight_init_gaussian(std)
+# net.weight_init_gaussian(std)
+net.weight_init_uniform(0.4)
 if device == 'cuda': 
     net.to(torch.device('cuda'))
 get_nb_parameters(net)
