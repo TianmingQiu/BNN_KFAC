@@ -65,6 +65,37 @@ def generate_H_true(H, tau = 0):
     return H + diag, H_inv
 
 def generate_kernel_diag_15080(H, tau = 0):
+
+    def generate_kernel_coords_15k():
+        # 15080
+        coords = []
+        curr = 0
+
+        for _ in range(5):
+            coords.append((curr,curr+5*5))
+            curr += 5*5
+        coords.append((curr,curr+5))
+        curr += 5
+
+        for _ in range(10):
+            coords.append((curr,curr+5*5*5))
+            curr += 5*5*5
+        coords.append((curr,curr+10))
+        curr += 10
+
+        for _ in range(80):
+            coords.append((curr,curr+10*4*4))
+            curr += 10*4*4
+        coords.append((curr,curr+80))
+        curr += 80
+
+        for _ in range(10):
+            coords.append((curr,curr+80))
+            curr += 80
+        coords.append((curr,curr+10))
+
+        return coords
+
     if H.numel() != 15080 ** 2:
         raise NotImplementedError
     res = torch.zeros_like(H)
@@ -76,6 +107,33 @@ def generate_kernel_diag_15080(H, tau = 0):
     return res, torch.inverse(res)
 
 def generate_kernel_diag_748(H, tau = 0):
+
+    def generate_kernel_coords_748():
+
+        coords = []
+        curr = 0
+
+        for _ in range(3):
+            coords.append((curr,curr+3*3))
+            curr += 3*3
+        coords.append((curr,curr+3))
+        curr += 3
+
+        for _ in range(6):
+            coords.append((curr,curr+3*3*3))
+            curr += 3*3*3
+        coords.append((curr,curr+6))
+        curr += 6
+
+        for _ in range(10):
+            coords.append((curr,curr+54))
+            curr += 54
+        coords.append((curr,curr+10))
+
+        return coords
+
+
+
     if H.numel() != 748 ** 2:
         raise NotImplementedError
     res = torch.zeros_like(H)
@@ -87,6 +145,31 @@ def generate_kernel_diag_748(H, tau = 0):
     return res, torch.inverse(res)
 
 def generate_kernel_diag_141(H, tau = 0):
+
+    def generate_kernel_coords_141():
+
+        coords = []
+        curr = 0
+
+        for _ in range(10):
+            coords.append((curr,curr+1))
+            curr += 1
+        coords.append((curr,curr+10))
+        curr += 10
+
+        for _ in range(10):
+            coords.append((curr,curr+10))
+            curr += 10
+        coords.append((curr,curr+10))
+        curr += 10
+
+        for _ in range(1):
+            coords.append((curr,curr+10))
+            curr += 10
+        coords.append((curr,curr+1))
+
+        return coords
+
     if H.numel() != 141 ** 2:
         raise NotImplementedError
     res = torch.zeros_like(H)
@@ -96,84 +179,6 @@ def generate_kernel_diag_141(H, tau = 0):
         res[a:b,a:b] = H[a:b,a:b]
 
     return res, torch.inverse(res)
-
-def generate_kernel_coords_15k():
-    # 15080
-    coords = []
-    curr = 0
-
-    for _ in range(5):
-        coords.append((curr,curr+5*5))
-        curr += 5*5
-    coords.append((curr,curr+5))
-    curr += 5
-
-    for _ in range(10):
-        coords.append((curr,curr+5*5*5))
-        curr += 5*5*5
-    coords.append((curr,curr+10))
-    curr += 10
-
-    for _ in range(80):
-        coords.append((curr,curr+10*4*4))
-        curr += 10*4*4
-    coords.append((curr,curr+80))
-    curr += 80
-
-    for _ in range(10):
-        coords.append((curr,curr+80))
-        curr += 80
-    coords.append((curr,curr+10))
-
-    return coords
-
-def generate_kernel_coords_748():
-
-    coords = []
-    curr = 0
-
-    for _ in range(3):
-        coords.append((curr,curr+3*3))
-        curr += 3*3
-    coords.append((curr,curr+3))
-    curr += 3
-
-    for _ in range(6):
-        coords.append((curr,curr+3*3*3))
-        curr += 3*3*3
-    coords.append((curr,curr+6))
-    curr += 6
-
-    for _ in range(10):
-        coords.append((curr,curr+54))
-        curr += 54
-    coords.append((curr,curr+10))
-
-    return coords
-
-def generate_kernel_coords_141():
-
-    coords = []
-    curr = 0
-
-    for _ in range(10):
-        coords.append((curr,curr+1))
-        curr += 1
-    coords.append((curr,curr+10))
-    curr += 10
-
-    for _ in range(10):
-        coords.append((curr,curr+10))
-        curr += 10
-    coords.append((curr,curr+10))
-    curr += 10
-
-    for _ in range(1):
-        coords.append((curr,curr+10))
-        curr += 10
-    coords.append((curr,curr+1))
-
-    return coords
 
 def get_near_psd(A, epsilon):
     C = (A + A.T)/2
