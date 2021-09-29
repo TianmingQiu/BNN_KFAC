@@ -3,26 +3,22 @@ from matplotlib import pyplot as plt
 from PIL import Image, ImageOps  
 import numpy as np
 
-def calculateDominance(H, tau = 0.00001):
-    if H.numel() != 15080 ** 2:
-        raise NotImplementedError
+def calculate_dominance(H, tau = 0.00001):
     diag = torch.diag(H.new(H.shape[0]).fill_(1))
     reg = H + diag * tau
-    coords = generate_kernel_coords_15k()
+    # coords = generate_kernel_coords_15k()
 
     sum_diag = torch.diag(reg).abs().sum().item()
     sum_all  = reg.abs().sum().item()
-    sum_block=0
-    for (a,b) in coords:
-        sum_block += reg[a:b,a:b].abs().sum().item()
+    # sum_block=0
+    # for (a,b) in coords:
+    #     sum_block += reg[a:b,a:b].abs().sum().item()
 
     print(f"Sum of diagonal         : {sum_diag:.2f}")
-    print(f"Sum of kernel diagonal  : {sum_block:.2f}")
     print(f"Sum of all elements     : {sum_all:.2f}")
     print(f"Diagonal Dominance      : {sum_diag/sum_all:.8f} (1/{int(sum_all/sum_diag)})")
-    print(f"Kernel Dominance        : {sum_block/sum_all:.8f} (1/{int(sum_all/sum_block)})")
 
-    return sum_diag/sum_all, sum_block/sum_all
+    return sum_diag/sum_all
 
 def calculateEigval(H, regParam = 0.00001):
     if H.numel() != 15080 ** 2:
@@ -226,18 +222,20 @@ def tensor_to_image(tensor,scale = -1):
     image = Image.fromarray(np.uint8(255*torch.sqrt(norm).numpy())).convert('RGB')
     return image
 
-def plot_lambda(H, values):
+def plot_lambda(H, lambdas):
     # Tikhonov regularization
     def calculateDiff(a,b):
         return (b-a).abs().sum() / b.abs().sum()
 
     val = []
     idx = []
-    for v in values:
+    for v in lambdas:
         a,b = generate_H_true(H,v)
         c,d = generate_diag(H,v)
         val.append(calculateDiff(b,d))
         idx.append(v)
 
+    plt.xlabel('lambda')
+    plt.ylabel('Sum of difference ')
     plt.yscale('log')
     plt.plot(idx,val)
