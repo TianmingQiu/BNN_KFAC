@@ -78,9 +78,9 @@ if device == 'cuda':
 get_nb_parameters(net)
 criterion = torch.nn.CrossEntropyLoss().to(device)
 optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-train(net, device, train_loader, criterion, optimizer, epochs=10)
+# train(net, device, train_loader, criterion, optimizer, epochs=10)
 # save(net, model_path + 'BaseNet_750.dat')
-# load(net, model_path + 'BaseNet_750.dat')
+load(net, model_path + 'BaseNet_750.dat')
 
 # run on the testset
 sgd_predictions, sgd_labels = eval(net, device, test_loader)
