@@ -176,38 +176,36 @@ def generate_kernel_diag_141(H, tau = 0, n = 1):
 
     return res, torch.inverse(n*res)
 
-def generate_kernel_diag_1021(H, tau = 0, n = 1):
+def generate_kernel_diag(H, tau = 0, n = 1, n_hid = 1):
 
-    def generate_kernel_coords_1021():
+    def generate_kernel_coords():
 
         coords = []
         curr = 0
 
-        for _ in range(30):
-            coords.append((curr,curr+1))
+        for _ in range(n_hid):
+            coords.append((curr,curr+n_hid))
             curr += 1
-        coords.append((curr,curr+30))
-        curr += 30
+        coords.append((curr,curr+n_hid))
+        curr += n_hid
 
-        for _ in range(30):
-            coords.append((curr,curr+30))
-            curr += 30
-        coords.append((curr,curr+30))
-        curr += 30
+        for _ in range(n_hid):
+            coords.append((curr,curr+n_hid))
+            curr += n_hid
+        coords.append((curr,curr+n_hid))
+        curr += n_hid
 
         for _ in range(1):
-            coords.append((curr,curr+30))
-            curr += 30
+            coords.append((curr,curr+n_hid))
+            curr += n_hid
         coords.append((curr,curr+1))
 
         return coords
 
-    if H.numel() != 1021 ** 2:
-        raise NotImplementedError
     res = torch.zeros_like(H)
     diag = torch.diag(H.new(H.shape[0]).fill_(1))
     H += diag * tau
-    for (a,b) in generate_kernel_coords_1021():
+    for (a,b) in generate_kernel_coords():
         res[a:b,a:b] = H[a:b,a:b]
 
     return res, torch.inverse(n*res)
