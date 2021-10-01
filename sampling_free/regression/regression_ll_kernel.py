@@ -96,14 +96,14 @@ torch.manual_seed(2)    # reproducible
 
 # initialize data
 lim = 0.2
-N = 80
+N = 30
 sigma = 3
 x = torch.FloatTensor(N, 1).uniform_(-4, 4).sort(dim=0).values # random x data (tensor), shape=(20, 1)
 y = x.pow(3) + sigma * torch.rand(x.size()) # noisy y data (tensor), shape=(20, 1)
 x, y = Variable(x,requires_grad=True), Variable(y,requires_grad=True) # torch can only train on Variable
 
 # define the network
-net = Net(input_dim=1, output_dim=1, n_hid=4)     
+net = Net(input_dim=1, output_dim=1, n_hid=30)     
 net.weight_init_uniform(lim)
 get_nb_parameters(net)
 optimizer = torch.optim.SGD(net.parameters(), lr=1e-3)
@@ -131,7 +131,7 @@ H = H/10000
 
 # get inversion of H
 std = 0.1
-kernel, kernel_inv  = utils.generate_kernel_diag(H, std ** 2, N, 4)
+kernel, kernel_inv  = utils.generate_kernel_diag(H, std ** 2, N, 30)
 
 # make new prediction
 x_ = torch.unsqueeze(torch.linspace(-6, 6), dim=1)  # x data (tensor), shape=(100, 1)
