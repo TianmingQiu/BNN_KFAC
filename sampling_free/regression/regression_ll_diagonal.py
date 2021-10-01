@@ -39,11 +39,20 @@ class Net(torch.nn.Module):
         x = self.fc3(x)  # linear output
         return x
 
-    def weight_init(self, std):
+    def weight_init_gaussian(self, std):
         for layer in self.modules():   
             if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                 init.normal_(layer.weight, 0, std)
-            # bias.data should be 0
+                # bias.data should be 0
+                layer.bias.data.fill_(0)
+            elif layer.__class__.__name__ == 'MultiheadAttention':
+                raise NotImplementedError
+
+    def weight_init_uniform(self, lim):
+        for layer in self.modules():   
+            if layer.__class__.__name__ in ['Linear', 'Conv2d']:
+                init.uniform_(layer.weight, -lim, lim)
+                # bias.data should be 0
                 layer.bias.data.fill_(0)
             elif layer.__class__.__name__ == 'MultiheadAttention':
                 raise NotImplementedError
@@ -73,7 +82,6 @@ def jacobian(y, x):
     return jac
 
 # file path
-parent = os.path.dirname(os.path.dirname(current))
 data_path = parent + "/data/"
 model_path = parent + "/theta/"
 result_path = parent + "/results/Regression/"
@@ -81,16 +89,16 @@ result_path = parent + "/results/Regression/"
 torch.manual_seed(2)    # reproducible
 
 # initialize data
-std = 0.1
+lim = 0.2
 N = 30
-sigma = 0.2
+sigma = 3
 x = torch.FloatTensor(30, 1).uniform_(-4, 4).sort(dim=0).values # random x data (tensor), shape=(20, 1)
 y = x.pow(3) + sigma * torch.rand(x.size()) # noisy y data (tensor), shape=(20, 1)
 x, y = Variable(x,requires_grad=True), Variable(y,requires_grad=True) # torch can only train on Variable
 
 # define the network
-net = Net(input_dim=1, output_dim=1, n_hid=10)     
-net.weight_init(std)
+net = Net(input_dim=1, output_dim=1, n_hid=30)     
+net.weight_init_uniform(lim)
 get_nb_parameters(net)
 optimizer = torch.optim.SGD(net.parameters(), lr=1e-3)
 loss_func = torch.nn.MSELoss()  # this is for regression mean squared loss
@@ -105,6 +113,7 @@ for t in range(10000):
     optimizer.step()        # apply gradients  
     diag.update(batch_size=1)
 
+std = 0.1
 estimator = diag
 estimator.invert(std**2, N)
 
@@ -113,8 +122,7 @@ for i,layer in enumerate(list(estimator.model.modules())[1:]):
     if layer in estimator.state:
         H_i = estimator.inv_state[layer]
         h.append(torch.flatten(H_i))
-H_inv = torch.cat(h, dim=0)
-
+H_inv = torch.cat(h, dim=0).unsqueeze(0)
 
 x_ = torch.unsqueeze(torch.linspace(-6, 6), dim=1)  # x data (tensor), shape=(100, 1)
 y_ = x_.pow(3)      
@@ -143,7 +151,7 @@ plt.fill_between(x_.data.numpy().squeeze(1), pred_mean - 3*pred_std, pred_mean +
 plt.plot(x_.data.numpy(), y_.data.numpy(), c='black', label='ground truth', linewidth = 2)
 plt.plot(x_.data.numpy(), pred_mean, c='cornflowerblue', label='mean pred', linewidth = 2)
 plt.scatter(x.data.numpy(), y.data.numpy(), s=20, color = "black")
-plt.title('Uncertainty with diagonal Hessian', fontsize=20)
+#plt.title('Uncertainty with diagonal Hessian', fontsize=20)
 plt.xlabel('$x$', fontsize=15)
 plt.ylabel('$y$', fontsize=15)
 plt.legend()

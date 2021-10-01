@@ -1,3 +1,4 @@
+# Add path
 from re import X
 import sys
 import os
@@ -7,13 +8,7 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(os.path.dirname(current))
 sys.path.append(parent)
 
-
-# From the repository
-from models.curvatures import BlockDiagonal, Diagonal, KFAC, EFB, INF
-from models.utilities import calibration_curve
-from models import plot
-
-
+# Standard import
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
@@ -23,32 +18,18 @@ import torch.utils.data as Data
 import matplotlib.pyplot as plt
 import numpy as np
 
+# From the repository
+from models.curvatures import BlockDiagonal, Diagonal, KFAC, EFB, INF
+from models.utilities import calibration_curve
+from models import plot
 
-# define a network
-class Net(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, n_hid):
-        super(Net, self).__init__()
-        self.fc1 = torch.nn.Linear(input_dim, n_hid)   # hidden layer
-        self.fc2 = torch.nn.Linear(n_hid, n_hid)   # hidden layer
-        self.fc3 = torch.nn.Linear(n_hid, output_dim)   # output layer
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))  # activation function for hidden layer
-        x = F.relu(self.fc2(x)) 
-        x = self.fc3(x)  # linear output
-        return x
-
-    def weight_init(self, std):
-        for layer in self.modules():   
-            if layer.__class__.__name__ in ['Linear', 'Conv2d']:
-                init.normal_(layer.weight, 0, std)
-            # bias.data should be 0
-                layer.bias.data.fill_(0)
-            elif layer.__class__.__name__ == 'MultiheadAttention':
-                raise NotImplementedError
-
-def get_nb_parameters(model):
-    print('Total params: %.2fK' % (np.sum(p.numel() for p in model.parameters()) / 1000.0))
+from inspect import getsourcefile
+current_path = os.path.abspath(getsourcefile(lambda:0))
+current_dir = os.path.dirname(current_path)
+parent_dir = current_dir[:current_dir.rfind(os.path.sep)]
+sys.path.insert(0, parent_dir)
+import utils
 
 # backward Jacobian: derivative of outputs with respect to weights
 def gradient(y, x, grad_outputs=None):
@@ -71,8 +52,42 @@ def jacobian(y, x):
         jac[i,:] = torch.flatten(gradient(y, x, grad_outputs))
     return jac
 
-# file path
-parent = os.path.dirname(os.path.dirname(current))
+# define a network
+class Net(torch.nn.Module):
+    def __init__(self, input_dim, output_dim, n_hid):
+        super(Net, self).__init__()
+        self.fc1 = torch.nn.Linear(input_dim, n_hid)   # hidden layer
+        self.fc2 = torch.nn.Linear(n_hid, n_hid)   # hidden layer
+        self.fc3 = torch.nn.Linear(n_hid, output_dim)   # output layer
+
+    def forward(self, x):
+        x = F.relu(self.fc1(x))  # activation function for hidden layer
+        x = F.relu(self.fc2(x)) 
+        x = self.fc3(x)  # linear output
+        return x
+
+    def weight_init_gaussian(self, std):
+        for layer in self.modules():   
+            if layer.__class__.__name__ in ['Linear', 'Conv2d']:
+                init.normal_(layer.weight, 0, std)
+                # bias.data should be 0
+                layer.bias.data.fill_(0)
+            elif layer.__class__.__name__ == 'MultiheadAttention':
+                raise NotImplementedError
+
+    def weight_init_uniform(self, lim):
+        for layer in self.modules():   
+            if layer.__class__.__name__ in ['Linear', 'Conv2d']:
+                init.uniform_(layer.weight, -lim, lim)
+                # bias.data should be 0
+                layer.bias.data.fill_(0)
+            elif layer.__class__.__name__ == 'MultiheadAttention':
+                raise NotImplementedError
+
+def get_nb_parameters(model):
+    print('Total params: %.2fK' % (np.sum(p.numel() for p in model.parameters()) / 1000.0))#
+
+# file paths
 data_path = parent + "/data/"
 model_path = parent + "/theta/"
 result_path = parent + "/results/Regression/"
@@ -80,16 +95,17 @@ result_path = parent + "/results/Regression/"
 torch.manual_seed(2)    # reproducible
 
 # initialize data
-std = 0.1
+lim = 0.2
 N = 30
-sigma = 0.2
+sigma = 3
 x = torch.FloatTensor(30, 1).uniform_(-4, 4).sort(dim=0).values # random x data (tensor), shape=(20, 1)
 y = x.pow(3) + sigma * torch.rand(x.size()) # noisy y data (tensor), shape=(20, 1)
 x, y = Variable(x,requires_grad=True), Variable(y,requires_grad=True) # torch can only train on Variable
 
 # define the network
-net = Net(input_dim=1, output_dim=1, n_hid=10)     
-net.weight_init(std)
+net = Net(input_dim=1, output_dim=1, n_hid=30)     
+net.weight_init_uniform(lim)
+get_nb_parameters(net)
 optimizer = torch.optim.SGD(net.parameters(), lr=1e-3)
 loss_func = torch.nn.MSELoss()  # this is for regression mean squared loss
 
@@ -114,8 +130,9 @@ for t in range(10000):
 H = H/10000
 
 # get inversion of H
+std = 0.1
 diag = torch.diag((std**2) * torch.ones(H.shape[0]))
-H_inv = torch.linalg.pinv(N * (H + diag))
+H_inv = torch.linalg.pinv(N * (H+diag))
 
 
 # make new prediction
