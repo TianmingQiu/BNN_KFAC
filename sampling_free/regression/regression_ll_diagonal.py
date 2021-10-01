@@ -97,7 +97,7 @@ y = x.pow(3) + sigma * torch.rand(x.size()) # noisy y data (tensor), shape=(20, 
 x, y = Variable(x,requires_grad=True), Variable(y,requires_grad=True) # torch can only train on Variable
 
 # define the network
-net = Net(input_dim=1, output_dim=1, n_hid=10)     
+net = Net(input_dim=1, output_dim=1, n_hid=30)     
 net.weight_init_uniform(lim)
 get_nb_parameters(net)
 optimizer = torch.optim.SGD(net.parameters(), lr=1e-3)
@@ -151,7 +151,7 @@ plt.fill_between(x_.data.numpy().squeeze(1), pred_mean - 3*pred_std, pred_mean +
 plt.plot(x_.data.numpy(), y_.data.numpy(), c='black', label='ground truth', linewidth = 2)
 plt.plot(x_.data.numpy(), pred_mean, c='cornflowerblue', label='mean pred', linewidth = 2)
 plt.scatter(x.data.numpy(), y.data.numpy(), s=20, color = "black")
-plt.title('Uncertainty with diagonal Hessian', fontsize=20)
+#plt.title('Uncertainty with diagonal Hessian', fontsize=20)
 plt.xlabel('$x$', fontsize=15)
 plt.ylabel('$y$', fontsize=15)
 plt.legend()

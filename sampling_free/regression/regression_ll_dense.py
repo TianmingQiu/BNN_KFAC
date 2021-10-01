@@ -103,8 +103,9 @@ y = x.pow(3) + sigma * torch.rand(x.size()) # noisy y data (tensor), shape=(20, 
 x, y = Variable(x,requires_grad=True), Variable(y,requires_grad=True) # torch can only train on Variable
 
 # define the network
-net = Net(input_dim=1, output_dim=1, n_hid=10)     
+net = Net(input_dim=1, output_dim=1, n_hid=30)     
 net.weight_init_uniform(lim)
+get_nb_parameters(net)
 optimizer = torch.optim.SGD(net.parameters(), lr=1e-3)
 loss_func = torch.nn.MSELoss()  # this is for regression mean squared loss
 
