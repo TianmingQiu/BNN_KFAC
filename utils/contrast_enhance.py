@@ -11,5 +11,6 @@ def enhancer(filePath, funcHandler = lambda x: x ** 0.5):
     return image
 
 result_path = 'results/Hessian/images/'
-im = enhancer(result_path + 'error_750.png', lambda x: x**0.5)
-im.save(result_path + 'tmp.png')
+target_file = 'error_15k_head.png'
+im = enhancer(result_path + target_file, lambda x: x**0.5)
+im.save(result_path + 'reinforced/' + target_file)
