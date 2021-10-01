@@ -265,7 +265,7 @@ class BlockDiagonal(Curvature):
             else:
                 n, s = add, multiply
             reg = torch.diag(value.new(value.shape[0]).fill_(n))
-            self.inv_state[layer] = (s * value + reg).inverse().cholesky()
+            self.inv_state[layer] = torch.pinverse(s * value + reg)
 
     def sample(self,
                layer: Module) -> Tensor:

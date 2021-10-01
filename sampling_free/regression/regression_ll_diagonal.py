@@ -34,8 +34,8 @@ class Net(torch.nn.Module):
         self.fc3 = torch.nn.Linear(n_hid, output_dim)   # output layer
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))  # activation function for hidden layer
-        x = F.relu(self.fc2(x)) 
+        x = F.silu(self.fc1(x))  # activation function for hidden layer
+        x = F.silu(self.fc2(x)) 
         x = self.fc3(x)  # linear output
         return x
 
@@ -58,7 +58,7 @@ class Net(torch.nn.Module):
                 raise NotImplementedError
 
 def get_nb_parameters(model):
-    print('Total params: %.2fK' % (np.sum(p.numel() for p in model.parameters()) / 1000.0))
+    print('Total params: %.2f' % (np.sum(p.numel() for p in model.parameters())))
 
 # backward Jacobian: derivative of outputs with respect to weights
 def gradient(y, x, grad_outputs=None):
@@ -156,7 +156,7 @@ plt.xlabel('$x$', fontsize=15)
 plt.ylabel('$y$', fontsize=15)
 plt.legend()
 plt.xlim([-6, 6])
-plt.ylim([-400, 400])
+#plt.ylim([-400, 400])
 plt.gca().yaxis.grid(alpha=0.3)
 plt.gca().xaxis.grid(alpha=0.3)
 plt.tick_params(labelsize=10)

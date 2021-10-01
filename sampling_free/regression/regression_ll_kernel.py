@@ -39,22 +39,31 @@ class Net(torch.nn.Module):
         self.fc3 = torch.nn.Linear(n_hid, output_dim)   # output layer
 
     def forward(self, x):
-        x = F.relu(self.fc1(x))  # activation function for hidden layer
-        x = F.relu(self.fc2(x)) 
+        x = F.silu(self.fc1(x))  # activation function for hidden layer
+        x = F.silu(self.fc2(x)) 
         x = self.fc3(x)  # linear output
         return x
 
-    def weight_init(self, std):
+    def weight_init_gaussian(self, std):
         for layer in self.modules():   
             if layer.__class__.__name__ in ['Linear', 'Conv2d']:
                 init.normal_(layer.weight, 0, std)
-            # bias.data should be 0
+                # bias.data should be 0
+                layer.bias.data.fill_(0)
+            elif layer.__class__.__name__ == 'MultiheadAttention':
+                raise NotImplementedError
+
+    def weight_init_uniform(self, lim):
+        for layer in self.modules():   
+            if layer.__class__.__name__ in ['Linear', 'Conv2d']:
+                init.uniform_(layer.weight, -lim, lim)
+                # bias.data should be 0
                 layer.bias.data.fill_(0)
             elif layer.__class__.__name__ == 'MultiheadAttention':
                 raise NotImplementedError
 
 def get_nb_parameters(model):
-    print('Total params: %.2fK' % (np.sum(p.numel() for p in model.parameters()) / 1000.0))
+    print('Total params: %.2f' % (np.sum(p.numel() for p in model.parameters())))
 
 # backward Jacobian: derivative of outputs with respect to weights
 def gradient(y, x, grad_outputs=None):
@@ -86,16 +95,17 @@ result_path = parent + "/results/Regression/"
 torch.manual_seed(2)    # reproducible
 
 # initialize data
-std = 0.2
+lim = 0.2
 N = 30
-sigma = 0.2
+sigma = 3
 x = torch.FloatTensor(30, 1).uniform_(-4, 4).sort(dim=0).values # random x data (tensor), shape=(20, 1)
 y = x.pow(3) + sigma * torch.rand(x.size()) # noisy y data (tensor), shape=(20, 1)
 x, y = Variable(x,requires_grad=True), Variable(y,requires_grad=True) # torch can only train on Variable
 
 # define the network
-net = Net(input_dim=1, output_dim=1, n_hid=10)     
-net.weight_init(std)
+net = Net(input_dim=1, output_dim=1, n_hid=30)     
+net.weight_init_uniform(lim)
+get_nb_parameters(net)
 optimizer = torch.optim.SGD(net.parameters(), lr=1e-3)
 loss_func = torch.nn.MSELoss()  # this is for regression mean squared loss
 
@@ -120,7 +130,8 @@ for t in range(10000):
 H = H/10000
 
 # get inversion of H
-kernel, kernel_inv  = utils.generate_kernel_diag_141(H, std ** 2)
+std = 0.1
+kernel, kernel_inv  = utils.generate_kernel_diag_1021(H, std ** 2, N)
 
 # make new prediction
 x_ = torch.unsqueeze(torch.linspace(-6, 6), dim=1)  # x data (tensor), shape=(100, 1)
@@ -150,12 +161,12 @@ plt.fill_between(x_.data.numpy().squeeze(1), pred_mean - 3*pred_std, pred_mean +
 plt.plot(x_.data.numpy(), y_.data.numpy(), c='black', label='ground truth', linewidth = 2)
 plt.plot(x_.data.numpy(), pred_mean, c='cornflowerblue', label='mean pred', linewidth = 2)
 plt.scatter(x.data.numpy(), y.data.numpy(), s=20, color = "black")
-plt.title('Uncertainty with kernel-diagonal Hessian', fontsize=20)
+#plt.title('Uncertainty with kernel-diagonal Hessian', fontsize=20)
 plt.xlabel('$x$', fontsize=15)
 plt.ylabel('$y$', fontsize=15)
 plt.legend()
 plt.xlim([-6, 6])
-plt.ylim([-800, 800])
+#plt.ylim([-400, 400])
 plt.gca().yaxis.grid(alpha=0.3)
 plt.gca().xaxis.grid(alpha=0.3)
 plt.tick_params(labelsize=10) 

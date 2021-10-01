@@ -140,7 +140,7 @@ def generate_kernel_diag_748(H, tau = 0):
 
     return res, torch.inverse(res)
 
-def generate_kernel_diag_141(H, tau = 0):
+def generate_kernel_diag_141(H, tau = 0, n = 1):
 
     def generate_kernel_coords_141():
 
@@ -174,7 +174,45 @@ def generate_kernel_diag_141(H, tau = 0):
     for (a,b) in generate_kernel_coords_141():
         res[a:b,a:b] = H[a:b,a:b]
 
-    return res, torch.inverse(res)
+    return res, torch.inverse(n*res)
+
+def generate_kernel_diag_1021(H, tau = 0, n = 1):
+
+    def generate_kernel_coords_1021():
+
+        coords = []
+        curr = 0
+
+        for _ in range(30):
+            coords.append((curr,curr+1))
+            curr += 1
+        coords.append((curr,curr+30))
+        curr += 30
+
+        for _ in range(30):
+            coords.append((curr,curr+30))
+            curr += 30
+        coords.append((curr,curr+30))
+        curr += 30
+
+        for _ in range(1):
+            coords.append((curr,curr+30))
+            curr += 30
+        coords.append((curr,curr+1))
+
+        return coords
+
+    if H.numel() != 1021 ** 2:
+        raise NotImplementedError
+    res = torch.zeros_like(H)
+    diag = torch.diag(H.new(H.shape[0]).fill_(1))
+    H += diag * tau
+    for (a,b) in generate_kernel_coords_1021():
+        res[a:b,a:b] = H[a:b,a:b]
+
+    return res, torch.inverse(n*res)
+
+
 
 def get_near_psd(A, epsilon):
     C = (A + A.T)/2
