@@ -158,7 +158,6 @@ plt.fill_between(x_.data.numpy().squeeze(1), pred_mean - 3*pred_std, pred_mean +
 plt.plot(x_.data.numpy(), y_.data.numpy(), c='black', label='ground truth', linewidth = 2)
 plt.plot(x_.data.numpy(), pred_mean, c='cornflowerblue', label='mean pred', linewidth = 2)
 plt.scatter(x.data.numpy(), y.data.numpy(), s=20, color = "black")
-plt.title('Uncertainty with dense Hessian', fontsize=20)
 plt.xlabel('$x$', fontsize=15)
 plt.ylabel('$y$', fontsize=15)
 plt.legend()
