@@ -1,28 +1,61 @@
 from re import X
 import sys
 import os
+import time
+import datetime
+import itertools
 
 from numpy.core.function_base import add_newdoc
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(os.path.dirname(current))
 sys.path.append(parent)
 
-
-# From the repository
-from models.curvatures import BlockDiagonal, Diagonal, KFAC, EFB, INF
-from models.utilities import calibration_curve
-from models import plot
-
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torch.nn import init
 import torch.utils.data as Data
+from torch import nn, optim
+from torch.utils.data import random_split, DataLoader, RandomSampler
+from torch.utils.data import Dataset
+import torchvision
+import torchvision.transforms as transforms
 
 import matplotlib.pyplot as plt
 import numpy as np
 import hamiltorch
+import tqdm
+
+# file path
+data_path = parent + "/data/"
+model_path = parent + "/theta/"
+result_path = parent + "/results/Regression/"
+
+
+def load_agw_1d(x, y, get_feats=False):
+    def features(x):
+        return np.hstack([x[:, None] / 2.0, (x[:, None] / 2.0) ** 2])
+    f = features(x)
+    '''
+    x_means, x_stds = x.mean(axis=0), x.std(axis=0)
+    y_means, y_stds = y.mean(axis=0), y.std(axis=0)
+    f_means, f_stds = f.mean(axis=0), f.std(axis=0)
+
+    X = ((x - x_means) / x_stds).astype(np.float32)
+    Y = ((y - y_means) / y_stds).astype(np.float32)
+    F = ((f - f_means) / f_stds).astype(np.float32)
+    '''
+
+    X = x.astype(np.float32)
+    Y = y.astype(np.float32)
+    F = f.astype(np.float32)
+
+    if get_feats:
+        return F, Y
+
+    return X, Y
 
 class Net(torch.nn.Module):
     def __init__(self, input_dim, output_dim, n_hid):
@@ -58,35 +91,30 @@ class Net(torch.nn.Module):
 def get_nb_parameters(model):
     print('Total params: %.2f' % (np.sum(p.numel() for p in model.parameters())))
 
-# file path
-data_path = parent + "/data/"
-model_path = parent + "/theta/"
-result_path = parent + "/results/Regression/"
 
-torch.manual_seed(2)    # reproducible
-device = 'cpu'
-# initialize data
-lim = 0.2
-N = 80
+## code begins here
+
+N = 30
 sigma = 3
+lim = 0.2
+x = np.sort(np.random.uniform(-4,4,N))
+y = np.power(x,3) + sigma * np.random.rand(x.size) # noisy y data (tensor), shape=(20, 1)
 
-x = torch.FloatTensor(N, 1).uniform_(-4, 4).sort(dim=0).values # random x data (tensor), shape=(20, 1)
-y = x.pow(3) + sigma * torch.rand(x.size()) # noisy y data (tensor), shape=(20, 1)
+X, Y = load_agw_1d(x, y, get_feats=False)
+X = torch.Tensor(X).view(-1,1)
+Y = torch.Tensor(Y).view(-1,1)
 
-X = torch.Tensor(x).view(-1,1)
-Y = torch.Tensor(y).view(-1,1)
-
-x_ = torch.linspace(-6,6,500)
-y_ = x_.pow(3)  
-X_test = torch.Tensor(x_).view(-1,1)
-
-# define the network
-net = Net(input_dim=1, output_dim=1, n_hid=4)     
+net = Net(input_dim=1, output_dim=1, n_hid=30)     
 net.weight_init_uniform(lim)
 get_nb_parameters(net)
 
+X_test = torch.linspace(-6,6,100).view(-1,1)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+if torch.cuda.is_available():
+    print(torch.cuda.get_device_name(0))
+
 step_size = 0.0005
-num_samples = 1000
+num_samples = 10000
 L = 30
 burn = -1
 store_on_GPU = False
@@ -113,6 +141,7 @@ params_init = hamiltorch.util.flatten(net).to(device).clone()
 # Set the Inverse of the Mass matrix
 inv_mass = torch.ones(params_init.shape) / mass
 
+print(params_init.shape)
 integrator = hamiltorch.Integrator.EXPLICIT
 sampler = hamiltorch.Sampler.HMC
 
@@ -152,29 +181,27 @@ s_al = (pred_list[200:].var(0).to('cpu') + tau_out ** -1) ** 0.5
 f, ax = plt.subplots(1, 1, figsize=(8, 4))
 
 # Get upper and lower confidence bounds
-lower, upper = (m - s*2).flatten(), (m + s*2).flatten()
-# + aleotoric
-lower_al, upper_al = (m - s_al*2).flatten(), (m + s_al*2).flatten()
+lower_1, upper_1 = (m - s*2).flatten(), (m + s*2).flatten()
+lower_2, upper_2 = (m - 2*s*2).flatten(), (m + 2*s*2).flatten()
+lower_3, upper_3 = (m - 3*s*2).flatten(), (m + 3*s*2).flatten()
 
-# Plot training data as black stars
-ax.plot(X.numpy(), Y.numpy(), 'k*', rasterized=True)
-# Plot predictive means as blue line
-ax.plot(X_test.numpy(), m.numpy(), 'b', rasterized=True)
-# Shade between the lower and upper confidence bounds
-ax.fill_between(X_test.flatten().numpy(), lower.numpy(), upper.numpy(), alpha=0.5, rasterized=True)
-ax.fill_between(X_test.flatten().numpy(), lower_al.numpy(), upper_al.numpy(), alpha=0.2, rasterized=True)
-ax.set_ylim([-2, 2])
-ax.set_xlim([-2, 2])
-plt.grid()
-ax.legend(['Observed Data', 'Mean', 'Epistemic', 'Aleatoric'], fontsize = fs)
-ax.tick_params(axis='both', which='major', labelsize=14)
-ax.tick_params(axis='both', which='minor', labelsize=14)
+# view data
+plt.figure(figsize=(6,5))
+plt.fill_between(X_test.flatten().numpy(), lower_1.numpy(), upper_1.numpy(), color='burlywood', alpha=.6, label='+/- 1 std')
+plt.fill_between(X_test.flatten().numpy(), lower_2.numpy(), upper_2.numpy(), color='burlywood', alpha=.5, label='+/- 2 std')
+plt.fill_between(X_test.flatten().numpy(), lower_3.numpy(), upper_3.numpy(), color='burlywood', alpha=.4, label='+/- 3 std')
+plt.plot(X_test.numpy(), np.power(X_test.numpy(),3), c='black', label='ground truth', linewidth = 2)
+plt.plot(X_test.numpy(), m.numpy(), c='cornflowerblue', label='mean pred', linewidth = 2)
+plt.scatter(X.numpy(), Y.numpy(), s=20, color = "black")
+plt.xlabel('$x$', fontsize=15)
+plt.ylabel('$y$', fontsize=15)
+plt.legend()
+plt.xlim([-6, 6])
+#plt.ylim([-400, 400])
+plt.gca().yaxis.grid(alpha=0.3)
+plt.gca().xaxis.grid(alpha=0.3)
+plt.tick_params(labelsize=10) 
+plt.savefig(result_path+'hmc.png', format='png', bbox_inches = 'tight')
+#plt.savefig(result_path+'hmc.eps', format='eps', bbox_inches = 'tight')
 
-bbox = {'facecolor': 'white', 'alpha': 0.8, 'pad': 1, 'boxstyle': 'round', 'edgecolor':'black'}
-plt.text(1., -1.5, 'Acceptance Rate: 58 %', bbox=bbox, fontsize=16, horizontalalignment='center')
 
-
-plt.tight_layout()
-# plt.savefig('plots/full_hmc.pdf', rasterized=True)
-    
-plt.show()

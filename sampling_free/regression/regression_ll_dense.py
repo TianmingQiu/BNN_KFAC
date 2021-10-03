@@ -22,14 +22,7 @@ import numpy as np
 from models.curvatures import BlockDiagonal, Diagonal, KFAC, EFB, INF
 from models.utilities import calibration_curve
 from models import plot
-
-
-from inspect import getsourcefile
-current_path = os.path.abspath(getsourcefile(lambda:0))
-current_dir = os.path.dirname(current_path)
-parent_dir = current_dir[:current_dir.rfind(os.path.sep)]
-sys.path.insert(0, parent_dir)
-import utils
+from sampling_free import utils
 
 # backward Jacobian: derivative of outputs with respect to weights
 def gradient(y, x, grad_outputs=None):
@@ -134,6 +127,8 @@ std = 0.1
 diag = torch.diag((std**2) * torch.ones(H.shape[0]))
 H_inv = torch.linalg.pinv(N * (H+diag))
 
+image_inv = utils.tensor_to_image(H_inv.abs())
+image_inv.save(result_path+'/H_inv_1k_dense.png')
 
 # make new prediction
 x_ = torch.unsqueeze(torch.linspace(-6, 6), dim=1)  # x data (tensor), shape=(100, 1)
