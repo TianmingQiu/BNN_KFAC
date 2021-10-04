@@ -3,7 +3,7 @@ import sys
 import os
 
 from numpy.core.function_base import add_newdoc
-current = os.path.dirname(os.path.realpath(__file__))
+current = os.path.dirname(os.path.realpath('__file__'))
 parent = os.path.dirname(os.path.dirname(current))
 sys.path.append(parent)
 
@@ -17,7 +17,7 @@ import numpy as np
 
 # From the repository
 from models.curvatures import BlockDiagonal, Diagonal, KFAC, EFB, INF
-
+from sampling_free import utils
 
 # define a network
 class Net(torch.nn.Module):
@@ -125,17 +125,18 @@ for j,x_j in enumerate(x_):
     for layer in list(estimator.model.modules())[1:]:
         g = []
         if layer in estimator.state:
-            Q = estimator.state[layer][0]
-            H = estimator.state[layer][1] 
-            diag_Q = torch.diag(tau * torch.ones(Q.shape[0]))
-            diag_H = torch.diag(tau * torch.ones(H.shape[0]))
-            Q_inv = torch.pinverse(N * (Q+diag_Q))
-            H_inv = torch.pinverse(N * (H+diag_H))
+            q_i = estimator.state[layer][0]
+            h_i = estimator.state[layer][1] 
+            dq = torch.diag(tau * torch.ones(q_i.shape[0]))
+            dh = torch.diag(tau * torch.ones(h_i.shape[0]))
+            q_inv = torch.pinverse(N * (q_i+dq))
+            h_inv = torch.pinverse(N * (h_i+dh))
             for p in layer.parameters():    
                 g.append(torch.flatten(jacobian(pred_j, p)))
             J_i = torch.cat(g, dim=0).unsqueeze(0) 
-            H = torch.kron(Q_inv,H_inv)
-            std_j += torch.abs(J_i @ H @ J_i.t()).item()
+            H_inv = utils.kronecker_product(q_inv,h_inv)
+            #H_inv = torch.kron(q_inv,h_inv)
+            std_j += torch.abs(J_i @ H_inv @ J_i.t()).item()
     std.append(std_j**0.5 + sigma)
 
 

@@ -275,3 +275,16 @@ def plot_lambda(H, lambdas):
     plt.ylabel('Sum of difference ')
     plt.yscale('log')
     plt.plot(idx,val)
+
+def kronecker_product(A: torch.Tensor, B: torch.Tensor): 
+     """ 
+     Batched Version of Kronecker Products 
+     :param A: has shape (b, a, c) 
+     :param B: has shape (b, k, p) 
+     :return: (b, ak, cp) 
+     """ 
+     assert A.dim() == 2 and B.dim() == 2
+  
+     res = torch.einsum('ac,kp->akcp', A, B).view(A.size(0)*B.size(0), A.size(1)*B.size(1))
+                                                     
+     return res 
