@@ -8,10 +8,18 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(os.path.dirname(current))
 sys.path.append(parent)
 
+from inspect import getsourcefile
+current_path = os.path.abspath(getsourcefile(lambda:0))
+current_dir = os.path.dirname(current_path)
+parent_dir = current_dir[:current_dir.rfind(os.path.sep)]
+sys.path.insert(0, parent_dir)
+import utils
+
 # Standard imports
 import numpy as np
 from tqdm import tqdm
 from matplotlib import pyplot as plt
+from PIL import Image, ImageOps  
 
 import torch
 import torch.nn as nn
@@ -21,146 +29,100 @@ from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
 
 # From the repository
-from models.wrapper import BaseNet
-from models.curvatures import BlockDiagonal, KFAC, EFB, INF
-from models.utilities import calibration_curve
-from models import plot
+from models.curvatures import Diagonal, BlockDiagonal, KFAC, EFB, INF
+from models.utilities import *
+from models.plot import *
+from models.wrapper import *
 
-def get_near_psd(A, epsilon):
-    C = (A + A.T)/2
-    eigval, eigvec = torch.linalg.eig(C.to(torch.double))
-    eigval[eigval.real < epsilon] = epsilon
-    return eigvec @ (torch.diag(eigval)) @ eigvec.t()
+# file path
+parent = os.path.dirname(os.path.dirname(current))
+data_path = parent + "/data/"
+model_path = parent + "/theta/"
+result_path = parent + "/results/Hessian/"
+
+# choose the device
+device = "cuda" if torch.cuda.is_available() else "cpu"
+torch.manual_seed(42)
+if device == 'cuda':
+    torch.cuda.manual_seed(42) 
+
+# load and normalize MNIST
+new_mirror = 'https://ossci-datasets.s3.amazonaws.com/mnist'
+datasets.MNIST.resources = [
+    ('/'.join([new_mirror, url.split('/')[-1]]), md5)
+    for url, md5 in datasets.MNIST.resources
+]
+
+train_set = datasets.MNIST(root=data_path,
+                                        train=True,
+                                        transform=transforms.ToTensor(),
+                                        download=True)
+train_loader = DataLoader(train_set, batch_size=32)
+
+# And some for evaluating/testing
+test_set = datasets.MNIST(root=data_path,
+                                        train=False,
+                                        transform=transforms.ToTensor(),
+                                        download=True)
+test_loader = DataLoader(test_set, batch_size=256)
 
 
-def gradient(y, x, grad_outputs=None):
-    """Compute dy/dx @ grad_outputs"""
-    if grad_outputs is None:
-        grad_outputs = torch.ones_like(y)
-    grad = torch.autograd.grad(y, [x], grad_outputs = grad_outputs, create_graph=True, retain_graph=True, allow_unused=True)[0]
-    return grad
 
-def jacobian(y, x, device):
-    '''
-    Compute dy/dx = dy/dx @ grad_outputs; 
-    y: output, batch_size * class_number
-    x: parameter
-    '''
-    jac = torch.zeros(y.shape[1], torch.flatten(x).shape[0]).to(device)
-    for i in range(y.shape[1]):
-        grad_outputs = torch.zeros_like(y)
-        grad_outputs[:,i] = 1
-        jac[i,:] = torch.flatten(gradient(y, x, grad_outputs))
-    return jac
+# Train the model
+N = 200
+std = 0.2
+net = BaseNet_15k()
+net.weight_init_uniform(std)
+if device == 'cuda': 
+    net.to(torch.device('cuda'))
+get_nb_parameters(net)
+criterion = torch.nn.CrossEntropyLoss().to(device)
+optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
+# train(net, device, train_loader, criterion, optimizer, epochs=10)
+# save(net, model_path + 'BaseNet_750.dat')
+load(net, model_path + 'BaseNet_15k.dat')
 
-if __name__ == '__main__':
-    
-    models_dir = 'theta'
-    results_dir = 'results'
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    parent = os.path.dirname(os.path.dirname(current))
-    path = parent + "/data"
-    # load and normalize MNIST
-    new_mirror = 'https://ossci-datasets.s3.amazonaws.com/mnist'
-    datasets.MNIST.resources = [
-        ('/'.join([new_mirror, url.split('/')[-1]]), md5)
-        for url, md5 in datasets.MNIST.resources
-    ]
+# run on the testset
+sgd_predictions, sgd_labels = eval(net, device, test_loader)
+acc = accuracy(sgd_predictions, sgd_labels)
 
-    train_set = datasets.MNIST(root=path,
-                                           train=True,
-                                           transform=transforms.ToTensor(),
-                                           download=True)
-    train_loader = DataLoader(train_set, batch_size=32)
+# compute the Kronecker factored FiM
+kfac = KFAC(net)
 
-    # And some for evaluating/testing
-    test_set = datasets.MNIST(root=path,
-                                          train=False,
-                                          transform=transforms.ToTensor(),
-                                          download=True)
-    test_loader = DataLoader(test_set, batch_size=1)
 
-    # Train the model
-    net = BaseNet(lr=1e-3, epoch=3, batch_size=32, device=device)
-    #net.load(models_dir + '/theta_best.dat')
-    criterion = nn.CrossEntropyLoss().to(device)
-    net.train(train_loader, criterion)
-    sgd_predictions, sgd_labels = net.eval(test_loader)
-    
-    print(f"MAP Accuracy: {100 * np.mean(np.argmax(sgd_predictions.cpu().numpy(), axis=1) == sgd_labels.numpy()):.2f}%")
+for images, labels in tqdm(train_loader):
+    logits = net(images.to(device))
+    dist = torch.distributions.Categorical(logits=logits)
+    # A rank-1 Kronecker factored FiM approximation.
+    labels = dist.sample()
+    loss = criterion(logits, labels)
+    net.zero_grad()
+    loss.backward()
+    kfac.update(batch_size=images.size(0))
 
-    # compute the Kronecker factored FiM
-    kfac = KFAC(net.model)
-    #kfac.load(models_dir + '/kfac.dat')
-    
-    for images, labels in tqdm(train_loader):
-        logits = net.model(images.to(device))
-        dist = torch.distributions.Categorical(logits=logits)
-        # A rank-1 Kronecker factored FiM approximation.
-        labels = dist.sample()
-        loss = criterion(logits, labels)
-        net.model.zero_grad()
-        loss.backward()
-        kfac.update(batch_size=images.size(0))
-    
 
-    # inversion of H and Q
-    estimator = kfac
-    add = 1
-    multiply = 200
-    estimator.invert(add, multiply)
-    
+# inversion of H and Q
+estimator = kfac
+estimator.invert(std**2, N)
 
-    # test image
-    targets = torch.Tensor()
-    kfac_prediction = torch.Tensor().to(device)
-    kfac_entropy_lst  = []
-    #mean_predictions, labels = net.eval(test_loader)
-    for images,labels in tqdm(test_loader):
-        # prediction mean, equals to the MAP output 
-        pred_mean = torch.nn.functional.softmax(net.model(images.to(device)) ,dim=1)        
-        # compute prediction variance  
-        pred_std = 0
-        idx  = np.argmax(pred_mean.cpu().detach().numpy(), axis=1)
-        grad_outputs = torch.zeros_like(pred_mean)
-        grad_outputs[:,idx] = 1
-        for layer in list(estimator.model.modules())[1:]:
-            g = []
-            if layer in estimator.state:
-                if torch.cuda.is_available():
-                    Q_i = estimator.inv_state[layer][0]
-                    H_i = estimator.inv_state[layer][1] 
-                    for p in layer.parameters():    
-                        g.append(torch.flatten(gradient(pred_mean, p, grad_outputs=grad_outputs)))
-                    J_i = torch.cat(g, dim=0).unsqueeze(0) 
-                    H = torch.kron(Q_i,H_i)
-                    pred_std += torch.abs(J_i @ H @ J_i.t()).item()
-        # uncertainty
-        const = 2*np.e*np.pi 
-        entropy = 0.5 * np.log2(const * pred_std)
-        kfac_entropy_lst.append(entropy) 
-        kfac_uncertainty = np.array(kfac_entropy_lst)
-        # ground truth
-        targets = torch.cat([targets, labels])  
-        # prediction, mean value of the gaussian distribution
-        kfac_prediction = torch.cat([kfac_prediction, pred_mean]) 
-    print(f"KFAC Accuracy: {100 * np.mean(np.argmax(kfac_prediction.cpu().detach().numpy(), axis=1) == targets.numpy()):.2f}%")
-    print(f"Mean KFAC Entropy:{np.mean(kfac_uncertainty)}%")
-    # kfac entropy: -1.7657 bits
 
-    # noise image
-    res_entropy_lst = []
-    for i in tqdm(range(10000)):
-        noise = torch.randn_like(images)
-        pred_mean = torch.nn.functional.softmax(net.model(noise.to(device)) ,dim=1)        
-        # compute prediction variance  
-        pred_std = 0
-        idx  = np.argmax(pred_mean.cpu().detach().numpy(), axis=1)
-        grad_outputs = torch.zeros_like(pred_mean)
-        grad_outputs[:,idx] = 1
-        for layer in list(estimator.model.modules())[1:]:
-            g = []
-            if layer in estimator.state:
+# test image
+targets = torch.Tensor()
+kfac_prediction = torch.Tensor().to(device)
+kfac_entropy_lst  = []
+#mean_predictions, labels = net.eval(test_loader)
+for images,labels in tqdm(test_loader):
+    # prediction mean, equals to the MAP output 
+    pred_mean = torch.nn.functional.softmax(net(images.to(device)) ,dim=1)        
+    # compute prediction variance  
+    pred_std = 0
+    idx  = np.argmax(pred_mean.cpu().detach().numpy(), axis=1)
+    grad_outputs = torch.zeros_like(pred_mean)
+    grad_outputs[:,idx] = 1
+    for layer in list(estimator.model.modules())[1:]:
+        g = []
+        if layer in estimator.state:
+            if torch.cuda.is_available():
                 Q_i = estimator.inv_state[layer][0]
                 H_i = estimator.inv_state[layer][1] 
                 for p in layer.parameters():    
@@ -168,29 +130,42 @@ if __name__ == '__main__':
                 J_i = torch.cat(g, dim=0).unsqueeze(0) 
                 H = torch.kron(Q_i,H_i)
                 pred_std += torch.abs(J_i @ H @ J_i.t()).item()
-        const = 2*np.e*np.pi 
-        entropy = 0.5 * np.log2(const * pred_std)
-        res_entropy_lst.append(entropy) 
-        res_uncertainty = np.array(res_entropy_lst)
-    print(f"Mean Noise Entropy:{np.mean(res_uncertainty)}%")
-    # noise entropy: 1.8006 bits
+    # uncertainty
+    const = 2*np.e*np.pi 
+    entropy = 0.5 * np.log2(const * pred_std)
+    kfac_entropy_lst.append(entropy) 
+    kfac_uncertainty = np.array(kfac_entropy_lst)
+    # ground truth
+    targets = torch.cat([targets, labels])  
+    # prediction, mean value of the gaussian distribution
+    kfac_prediction = torch.cat([kfac_prediction, pred_mean]) 
+print(f"KFAC Accuracy: {100 * np.mean(np.argmax(kfac_prediction.cpu().detach().numpy(), axis=1) == targets.numpy()):.2f}%")
+print(f"Mean KFAC Entropy:{np.mean(kfac_uncertainty)}%")
+# kfac entropy: -1.7657 bits
 
-    # calibration
-    ece_nn = calibration_curve(sgd_predictions.cpu().numpy(), sgd_labels.numpy())[0]
-    ece_bnn = calibration_curve(kfac_prediction.cpu().numpy(), targets.numpy())[0]
-    print(f"ECE NN: {100 * ece_nn:.2f}%, ECE BNN: {100 * ece_bnn:.2f}%")
-
-    fig, ax = plt.subplots(ncols=2, nrows=1, figsize=(12, 6), tight_layout=True)
-    ax[0].set_title('SGD', fontsize=16)
-    ax[1].set_title('KFAC-Laplace', fontsize=16)
-    plot.reliability_diagram(sgd_predictions.cpu().numpy(), sgd_labels.numpy(), axis=ax[0])
-    plot.reliability_diagram(kfac_prediction.cpu().numpy(), targets.numpy(), axis=ax[1])
-    #plt.savefig(results_dir+'reliability_diagram.png')
-
-    fig, ax = plt.subplots(figsize=(12, 7), tight_layout=True)
-    c1 = next(ax._get_lines.prop_cycler)['color']
-    c2 = next(ax._get_lines.prop_cycler)['color']
-    plot.calibration(sgd_predictions.cpu().numpy(), sgd_labels.numpy(), color=c1, label="SGD", axis=ax)
-    plot.calibration(kfac_prediction.cpu().numpy(), targets.numpy(), color=c2, label="KFAC-Laplace", axis=ax)
-    #plt.savefig(results_dir+'calibration.png')
-    
+# noise image
+res_entropy_lst = []
+for i in tqdm(range(10000)):
+    noise = torch.randn_like(images)
+    pred_mean = torch.nn.functional.softmax(net(noise.to(device)) ,dim=1)        
+    # compute prediction variance  
+    pred_std = 0
+    idx  = np.argmax(pred_mean.cpu().detach().numpy(), axis=1)
+    grad_outputs = torch.zeros_like(pred_mean)
+    grad_outputs[:,idx] = 1
+    for layer in list(estimator.model.modules())[1:]:
+        g = []
+        if layer in estimator.state:
+            Q_i = estimator.inv_state[layer][0]
+            H_i = estimator.inv_state[layer][1] 
+            for p in layer.parameters():    
+                g.append(torch.flatten(gradient(pred_mean, p, grad_outputs=grad_outputs)))
+            J_i = torch.cat(g, dim=0).unsqueeze(0) 
+            H = torch.kron(Q_i,H_i)
+            pred_std += torch.abs(J_i @ H @ J_i.t()).item()
+    const = 2*np.e*np.pi 
+    entropy = 0.5 * np.log2(const * pred_std)
+    res_entropy_lst.append(entropy) 
+    res_uncertainty = np.array(res_entropy_lst)
+print(f"Mean Noise Entropy:{np.mean(res_uncertainty)}%")
+# noise entropy: 1.8006 bits

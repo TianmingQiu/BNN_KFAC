@@ -20,12 +20,11 @@ import numpy as np
 from tqdm import tqdm
 import seaborn as sns
 from matplotlib import pyplot as plt
-from PIL import Image, ImageOps  
+
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
 from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
 
@@ -70,9 +69,8 @@ test_loader = DataLoader(test_set, batch_size=256)
 std = 0.2
 
 # Train the model
-net = BaseNet_750()
-# net.weight_init_gaussian(std)
-net.weight_init_uniform(0.2)
+net = BaseNet_15k()
+net.weight_init_uniform(std)
 if device == 'cuda': 
     net.to(torch.device('cuda'))
 get_nb_parameters(net)
@@ -80,7 +78,7 @@ criterion = torch.nn.CrossEntropyLoss().to(device)
 optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 # train(net, device, train_loader, criterion, optimizer, epochs=10)
 # save(net, model_path + 'BaseNet_750.dat')
-load(net, model_path + 'BaseNet_750.dat')
+load(net, model_path + 'BaseNet_15k.dat')
 
 # run on the testset
 sgd_predictions, sgd_labels = eval(net, device, test_loader)
@@ -110,6 +108,7 @@ H = H.cpu()/len(train_loader)
 diag = torch.diag((std**2) * torch.ones(H.shape[0]))
 H_inv = torch.pinverse(H + diag)
 
+'''
 H_diag = torch.diag(H)
 H_inv_diag = torch.diag(torch.reciprocal(H_diag + (std**2) * torch.ones(H.shape[0])))
 
@@ -130,8 +129,6 @@ image_inv_diag.save(result_path+'images/H_inv_750_diag.png')
 image_error = utils.tensor_to_image(torch.abs(H_inv-H_inv_diag_norm), scale=scale)
 image_error.save(result_path+'images/error_750.png')
 
-'''
-
 torch.save(H, result_path+'tensor/H_dense_750.pt')
 torch.save(H_inv, result_path+'tensor/H_inv_dense_750.pt')
 torch.save(H_inv_diag, result_path+'tensor/H_inv_diag_750.pt')
@@ -142,3 +139,55 @@ H_inv = torch.load(result_path+'tensor/H_inv_dense_15k.pt')
 H_inv_diag = torch.load(result_path+'tensor/H_inv_diag_15k.pt')
 H_inv_diag_norm = torch.load(result_path+'tensor/H_inv_diag_norm_15k.pt')
 '''
+
+# test image
+targets = torch.Tensor()
+dense_prediction = torch.Tensor().to(device)
+dense_entropy_lst  = []
+#mean_predictions, labels = net.eval(test_loader)
+for images,labels in tqdm(test_loader):
+    # prediction mean, equals to the MAP output 
+    pred_mean = torch.nn.functional.softmax(net(images.to(device)) ,dim=1)        
+    # compute prediction variance  
+    pred_std = 0
+    idx  = np.argmax(pred_mean.cpu().detach().numpy(), axis=1)
+    grad_outputs = torch.zeros_like(pred_mean)
+    grad_outputs[:,idx] = 1
+    g = []
+    for p in net.parameters():    
+        g.append(torch.flatten(utils.gradient(pred_mean, p, grad_outputs=grad_outputs)))
+    J = torch.cat(g, dim=0).unsqueeze(0).cpu()
+    pred_std = torch.abs(J @ H_inv @ J.t()).item()
+    # uncertainty
+    const = 2*np.e*np.pi 
+    entropy = 0.5 * np.log2(const * pred_std)
+    dense_entropy_lst.append(entropy) 
+    # ground truth
+    targets = torch.cat([targets, labels])  
+    # prediction, mean value of the gaussian distribution
+    dense_prediction = torch.cat([dense_prediction, pred_mean]) 
+dense_uncertainty = np.array(dense_entropy_lst)
+print(f"Dense Accuracy: {100 * np.mean(np.argmax(dense_prediction.cpu().detach().numpy(), axis=1) == targets.numpy()):.2f}%")
+print(f"Mean Dense Entropy:{np.mean(dense_uncertainty)}%")
+
+ # noise image
+res_entropy_lst = []
+for i in tqdm(range(10000)):
+    noise = torch.randn_like(images)
+    pred_mean = torch.nn.functional.softmax(net(noise.to(device)) ,dim=1)        
+    # compute prediction variance  
+    pred_std = 0
+    idx  = np.argmax(pred_mean.cpu().detach().numpy(), axis=1)
+    grad_outputs = torch.zeros_like(pred_mean)
+    grad_outputs[:,idx] = 1
+    g = []
+    for p in net.parameters():    
+        g.append(torch.flatten(gradient(pred_mean, p, grad_outputs=grad_outputs)))
+    J = torch.cat(g, dim=0).unsqueeze(0).cpu()
+    pred_std = torch.abs(J @ H @ J.t()).item()
+    const = 2*np.e*np.pi 
+    entropy = 0.5 * np.log2(const * pred_std)
+    res_entropy_lst.append(entropy) 
+    res_uncertainty = np.array(res_entropy_lst)
+print(f"Mean Noise Entropy:{np.mean(res_uncertainty)}%")
+# noise entropy: 1.8006 bits
