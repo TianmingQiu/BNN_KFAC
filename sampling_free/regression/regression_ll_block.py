@@ -3,27 +3,21 @@ import sys
 import os
 
 from numpy.core.function_base import add_newdoc
-current = os.path.dirname(os.path.realpath(__file__))
+current = os.path.dirname(os.path.realpath('__file__'))
 parent = os.path.dirname(os.path.dirname(current))
 sys.path.append(parent)
 
-
-# From the repository
-from models.curvatures import BlockDiagonal, Diagonal, KFAC, EFB, INF
-from models.utilities import calibration_curve
-from models import plot
-
-
+# Standard import
 import torch
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torch.nn import init
-import torch.utils.data as Data
-
 import matplotlib.pyplot as plt
 import numpy as np
-import imageio
 
+# From the repository
+from models.curvatures import BlockDiagonal, Diagonal, KFAC, EFB, INF
+from sampling_free import utils
 
 # define a network
 class Net(torch.nn.Module):
@@ -93,6 +87,7 @@ torch.manual_seed(2)    # reproducible
 lim = 0.2
 N = 30
 sigma = 3
+tau = 0.01
 x = torch.FloatTensor(30, 1).uniform_(-4, 4).sort(dim=0).values # random x data (tensor), shape=(20, 1)
 y = x.pow(3) + sigma * torch.rand(x.size()) # noisy y data (tensor), shape=(20, 1)
 x, y = Variable(x,requires_grad=True), Variable(y,requires_grad=True) # torch can only train on Variable
@@ -114,10 +109,8 @@ for t in range(10000):
     optimizer.step()        # apply gradients  
     kfac.update(batch_size=1)
 
-std = 0.1
 estimator = kfac
-estimator.invert(std**2, N)
-
+#estimator.invert(std**2, N)
 
 x_ = torch.unsqueeze(torch.linspace(-6, 6), dim=1)  # x data (tensor), shape=(100, 1)
 y_ = x_.pow(3)      
@@ -132,13 +125,18 @@ for j,x_j in enumerate(x_):
     for layer in list(estimator.model.modules())[1:]:
         g = []
         if layer in estimator.state:
-            Q_i = estimator.inv_state[layer][0]
-            H_i = estimator.inv_state[layer][1] 
+            q_i = estimator.state[layer][0]
+            h_i = estimator.state[layer][1] 
+            dq = torch.diag(tau * torch.ones(q_i.shape[0]))
+            dh = torch.diag(tau * torch.ones(h_i.shape[0]))
+            q_inv = torch.pinverse(N * (q_i+dq))
+            h_inv = torch.pinverse(N * (h_i+dh))
             for p in layer.parameters():    
                 g.append(torch.flatten(jacobian(pred_j, p)))
             J_i = torch.cat(g, dim=0).unsqueeze(0) 
-            H = torch.kron(Q_i,H_i)
-            std_j += torch.abs(J_i @ H @ J_i.t()).item()
+            H_inv = utils.kronecker_product(q_inv,h_inv)
+            #H_inv = torch.kron(q_inv,h_inv)
+            std_j += torch.abs(J_i @ H_inv @ J_i.t()).item()
     std.append(std_j**0.5 + sigma)
 
 
@@ -154,12 +152,11 @@ plt.fill_between(x_.data.numpy().squeeze(1), pred_mean - 3*pred_std, pred_mean +
 plt.plot(x_.data.numpy(), y_.data.numpy(), c='black', label='ground truth', linewidth = 2)
 plt.plot(x_.data.numpy(), pred_mean, c='cornflowerblue', label='mean pred', linewidth = 2)
 plt.scatter(x.data.numpy(), y.data.numpy(), s=20, color = "black")
-plt.title('Uncertainty with block diagonal Hessian', fontsize=20)
 plt.xlabel('$x$', fontsize=15)
 plt.ylabel('$y$', fontsize=15)
-plt.legend()
+#plt.legend()
 plt.xlim([-6, 6])
-plt.ylim([-400, 400])
+#plt.ylim([-400, 400])
 plt.gca().yaxis.grid(alpha=0.3)
 plt.gca().xaxis.grid(alpha=0.3)
 plt.tick_params(labelsize=10)
