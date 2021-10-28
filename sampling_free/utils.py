@@ -20,7 +20,7 @@ def calculate_dominance(H, tau = 0.00001):
 
     return sum_diag/sum_all
 
-def calculateEigval(H, regParam = 0.00001):
+def calculate_eigval(H, regParam = 0.00001):
     if H.numel() != 15080 ** 2:
         raise NotImplementedError
     diag = torch.diag(H.new(H.shape[0]).fill_(1))
@@ -38,6 +38,21 @@ def calculateEigval(H, regParam = 0.00001):
     eig = eig[:,0]
     plt.scatter(eig,torch.zeros_like(eig))
     return eig.mean(),eig.std()
+
+def plot_real_eigval(H):
+    x = []
+    y = []
+    h_eig = torch.eig(H)
+    eig_float = [float(a) for [a,b] in h_eig.eigenvalues]
+    maxval = max(eig_float)
+    for start in np.arange (-0.01, maxval + 0.2, 0.01):
+        x.append(start)
+        y.append(sum([start < a < start + 0.01 for a in eig_float]))
+    plt.xlabel('Eigenvalue')
+    plt.ylabel('Count(log scale)')
+    plt.yscale('log')
+    plt.plot(x,y)
+
 
 def generate_diag(H, tau = 0):
     H_diag = torch.diag(H) + tau
