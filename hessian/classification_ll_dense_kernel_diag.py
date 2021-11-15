@@ -1,7 +1,7 @@
 from re import X
 import sys
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 from inspect import getsourcefile
 current_path = os.path.abspath(getsourcefile(lambda:0))
@@ -26,13 +26,13 @@ from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
 
 # From the repository
-from models.wrapper import BaseNet
+from models.wrapper import BaseNet_750
 from models.curvatures import BlockDiagonal, KFAC, EFB, INF
 from models.utilities import calibration_curve
 from models import plot
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-parent = os.path.dirname(current)
+parent = os.path.dirname(current_path)
 path = parent + "/data"
 # load and normalize MNIST
 new_mirror = 'https://ossci-datasets.s3.amazonaws.com/mnist'
@@ -55,7 +55,7 @@ test_set = datasets.MNIST(root=path,
 test_loader = DataLoader(test_set, batch_size=1)
 
 # Train the model
-net = BaseNet(lr=1e-3, epoch=3, batch_size=32, device=device)
+net = BaseNet_750(lr=1e-3, epoch=3, batch_size=32, device=device)
 #net.load(models_dir + '/theta_best.dat')
 criterion = nn.CrossEntropyLoss().to(device)
 net.train(train_loader, criterion)

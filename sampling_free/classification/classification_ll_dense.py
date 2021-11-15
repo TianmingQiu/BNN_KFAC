@@ -69,7 +69,7 @@ test_loader = DataLoader(test_set, batch_size=256)
 std = 0.2
 
 # Train the model
-net = BaseNet_15k()
+net = BaseNet_750()
 net.weight_init_uniform(std)
 if device == 'cuda': 
     net.to(torch.device('cuda'))
@@ -78,7 +78,7 @@ criterion = torch.nn.CrossEntropyLoss().to(device)
 optimizer = torch.optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 # train(net, device, train_loader, criterion, optimizer, epochs=10)
 # save(net, model_path + 'BaseNet_750.dat')
-load(net, model_path + 'BaseNet_15k.dat')
+load(net, model_path + 'BaseNet_750.dat')
 
 # run on the testset
 sgd_predictions, sgd_labels = eval(net, device, test_loader)
@@ -107,6 +107,19 @@ H = H.cpu()/len(train_loader)
 
 diag = torch.diag((std**2) * torch.ones(H.shape[0]))
 H_inv = torch.pinverse(H + diag)
+
+# TIKHONOV
+# xrange = [i/10e4 for i in range(0,10)]
+# sums = []
+# for i in xrange:
+#     diag = torch.diag(i * torch.ones(H.shape[0]))
+#     H_inv = torch.pinverse(H + diag)
+#     sums.append(H_inv.abs().sum())
+# plt.yscale('log')
+# plt.plot(xrange,sums)
+# plt.xlabel('lambda')
+# plt.ylabel('Sum of absolute values of all elements')
+# plt.savefig('lambda.eps')
 
 '''
 H_diag = torch.diag(H)
