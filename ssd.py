@@ -141,6 +141,8 @@ class SSD(nn.Module):
             conf_preds = conf_data.view(num, num_priors,
                                         self.num_classes).transpose(2, 1)
 
+            print(conf_preds[0,1,3125]) # 0.9050, car
+
             # Decode predictions into bboxes.
             for i in range(num):
                 decoded_boxes = decode(loc_data[i], prior_data, variance)
@@ -165,6 +167,12 @@ class SSD(nn.Module):
                     output[i, cl, :count] = \
                         torch.cat((scores[ids[:count]].unsqueeze(1),
                                 boxes[ids[:count]]), 1)
+
+                    # For car showing purposes:
+                    if cl == 1:
+                        output[i,0,1] = torch.cat((conf_scores[cl,3125].unsqueeze(0),decoded_boxes[3125]))
+
+
             flt = output.contiguous().view(num, -1, 5)
             _, idx = flt[:, :, 0].sort(1, descending=True)
             _, rank = idx.sort(1)
