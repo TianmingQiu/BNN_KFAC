@@ -9,9 +9,9 @@ from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '4'
 # DEVICE = torch.device('cuda:7')
-DEVICE_LIST = [1]
+DEVICE_LIST = [0]
 
 import sys
 import time
@@ -69,28 +69,51 @@ parser.add_argument('--save_folder', default='weights/',
 try:
     args = parser.parse_args()
 except:
-    args = {'batch_size':4,
-            'resume': PATH_TO_WEIGHTS,
-            'start_iter': 0,
-            'num_workers': 4,
-            'cuda': True,
-            'lr': 1e-4,
-            'momentum': 0.9,
-            'weight_decay': 5e-4,
-            'gamma': 0.1,
-            'save_folder': 'weights/'}
+    class ARGS:
+        batch_size = 4
+        resume = PATH_TO_WEIGHTS
+        start_iter = 0
+        num_workers = 4
+        cuda = True
+        lr = 1e-4
+        momentum = 0.9
+        weight_decay = 5e-4
+        gamma = 0.1
+        save_folder = 'weights/'
+    args = ARGS()
 
 torch.set_default_tensor_type('torch.cuda.FloatTensor')
+
+def add_gaussian_noise(image,std,mean=0):
+    image = image + np.random.normal(mean,std,size=image.shape)
+    image[image<0] = 0
+    image[image>255] = 255
+    return image.astype('uint8')
+
+def crop_image(image, coords):
+    for a,b,c,d in coords:
+        image[a:b,c:d] = 0
+    return image
+
+def blur_image(image, coords,dividend = 2.0):
+    for a,b,c,d in coords:
+        x = image[a:b,c:d]
+        x = cv2.resize(x,(int((d-c)/dividend), int((b-a)/dividend)) )
+        x = cv2.resize(x,( d-c , b-a) ).astype('uint8')
+        image[a:b,c:d] = x
+    return image
 
 def kfac_diag(continue_flag):
     cfg = kitti_config
     dataset = KittiDetection(root='data/kitti/train.txt',
                                 transform=SSDAugmentation(cfg['min_dim'],
                                                         MEANS))
-    
+
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
-    ssd_net.load_weights(args.resume)
+    try: weight_path = args.resume
+    except: weight_path = args['resume']
+    ssd_net.load_weights(weight_path)
     ssd_net.cuda()
     net = ssd_net
 
@@ -117,9 +140,9 @@ def kfac_diag(continue_flag):
     # kfac_direc = None
 
 
-    if kfac_direc: 
+    if kfac_direc:
         print('Loading kfac...')
-        filehandler = open(kfac_direc, 'rb') 
+        filehandler = open(kfac_direc, 'rb')
         diag = pickle.load(filehandler)
         # diag.invert(add=0.1, multiply=1)
         print('Finished!')
@@ -169,7 +192,9 @@ def kfac_diag(continue_flag):
                     # out.append(torch.cat((torch.Tensor([i]), detections[0,i,j,:])))
                     out = torch.cat(( out , torch.cat((torch.Tensor([i]), detections[0,i,j,:])).unsqueeze(dim=0) ))
 
-        # out = torch.stack(out)
+        # For car showing purposes
+        # out = torch.cat(( out , torch.cat((torch.Tensor([1]), detections[0,0,1,:])).unsqueeze(dim=0) ))
+
         # DETECTIONS: SCORE(1), LOC(4)
         # OUT       : CLASS(1), SCORE(1), LOC(4)
         uncertainties = []
@@ -189,8 +214,8 @@ def kfac_diag(continue_flag):
                             if layer.bias is not None:
                                 grads = torch.cat([grads, layer.bias.grad.unsqueeze(dim=1)], dim=1)
                             all_grad = torch.cat((all_grad, torch.flatten(grads)))
-                
-                J = all_grad.unsqueeze(0) 
+
+                J = all_grad.unsqueeze(0)
                 pred_std = torch.abs(J * H * J).sum()
                 del J, all_grad
                 uncertainty.append(pred_std)
@@ -207,6 +232,16 @@ def kfac_diag(continue_flag):
         image = testset.pull_image(img_id)
         # img_name = '/root/Documents/BNN_KFAC/data/kitti/testing/image_2/000402.png'
         # image = cv2.imread(img_name, cv2.IMREAD_COLOR)
+
+        # INTRODUCE NOISE
+        image = add_gaussian_noise(image,10)
+
+        # CROP AND BLUR IMAGE
+        # [637.70557, 167.12257, 783.7215 , 230.99509]
+        # image = crop_image(image,[[167,230,637,680]])
+        image = blur_image(image,[[167,230,637,783]],4)
+
+        # RESIZE
         x = cv2.resize(image, (300, 300)).astype(np.float32)
         x -= (104.0, 117.0, 123.0)
         x = x.astype(np.float32)
@@ -241,6 +276,7 @@ def kfac_diag(continue_flag):
 
         for prediction,unc in zip(mean_predictions,uncertainty):
             index = int(prediction[0])
+            if index != 1: continue
             label_name = labels[index - 1]
             score = prediction[1]
 
@@ -261,7 +297,7 @@ def kfac_diag(continue_flag):
             # currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
             # currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
 
-        plt.savefig('images/diag.png')
+        # plt.savefig('foo.png')
 
     toc = time.time()
     print('Average Bayesian inference duration:',  "{:.2f}s".format((toc-tic) / num_iterations))
