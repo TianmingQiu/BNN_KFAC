@@ -214,6 +214,7 @@ def kfac_diag(continue_flag):
                             if layer.bias is not None:
                                 grads = torch.cat([grads, layer.bias.grad.unsqueeze(dim=1)], dim=1)
                             all_grad = torch.cat((all_grad, torch.flatten(grads)))
+                            model.zero_grad()
 
                 J = all_grad.unsqueeze(0)
                 pred_std = torch.abs(J * H * J).sum()
@@ -224,29 +225,31 @@ def kfac_diag(continue_flag):
 
         return out[1:], uncertainties
 
-    num_iterations = 1
+    num_iterations = 40
     tic = time.time()
     for iteration in range(num_iterations):
         testset = KittiDetection(root='data/kitti/train.txt')
-        img_id = 206 + iteration
+        img_id = 206 + iteration + 160
         image = testset.pull_image(img_id)
         # img_name = '/root/Documents/BNN_KFAC/data/kitti/testing/image_2/000402.png'
         # image = cv2.imread(img_name, cv2.IMREAD_COLOR)
 
         # INTRODUCE NOISE
-        image = add_gaussian_noise(image,10)
+        # image = add_gaussian_noise(image,10)
 
         # CROP AND BLUR IMAGE
         # [637.70557, 167.12257, 783.7215 , 230.99509]
         # image = crop_image(image,[[167,230,637,680]])
-        image = blur_image(image,[[167,230,637,783]],4)
+        # image = blur_image(image,[[167,230,637,783]],4)
 
         # RESIZE
         x = cv2.resize(image, (300, 300)).astype(np.float32)
         x -= (104.0, 117.0, 123.0)
         x = x.astype(np.float32)
         x = x[:, :, ::-1].copy()
-        plt.imshow(x)
+        # plt.imshow(x)
+        # plt.axis('off')
+        # plt.show()
         x = torch.from_numpy(x).permute(2, 0, 1)
         xx = Variable(x.unsqueeze(0))     # wrap tensor in Variable
         if torch.cuda.is_available():
@@ -254,9 +257,9 @@ def kfac_diag(continue_flag):
 
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         # View the sampled input image before transform
-        plt.figure(figsize=(10,10))
+        plt.figure(figsize=(12,50))
         plt.imshow(rgb_image)
-
+        plt.axis('off')
 
         h = []
         for i,layer in enumerate(list(diag.model.modules())[1:]):
@@ -276,7 +279,7 @@ def kfac_diag(continue_flag):
 
         for prediction,unc in zip(mean_predictions,uncertainty):
             index = int(prediction[0])
-            if index != 1: continue
+            # if index != 1: continue
             label_name = labels[index - 1]
             score = prediction[1]
 
@@ -290,13 +293,14 @@ def kfac_diag(continue_flag):
 
             currentAxis = plt.gca()
             currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
-            currentAxis.text(pt[0], pt[1], display_txt + "{:.1f}e-3".format(float(unc[0]) * 1000), bbox={'facecolor':color, 'alpha':0.5}, fontsize = 8)
+            currentAxis.text(pt[0], pt[1] - 12 if index == 1 else pt[3], display_txt + "{:.1f}e-2".format(float(unc[0]) * 10000), bbox={'facecolor':color, 'alpha':1}, fontsize = 12)
 
             # currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
             # currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
             # currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
             # currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
-
+        
+        plt.show()
         # plt.savefig('foo.png')
 
     toc = time.time()

@@ -150,3 +150,6 @@ dmypy.json
 *.json
 *.xml
 *.iml
+
+
+sampling_free/classification/15k_eig.pt
