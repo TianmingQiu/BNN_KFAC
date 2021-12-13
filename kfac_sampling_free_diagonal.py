@@ -200,10 +200,11 @@ def kfac_diag(continue_flag):
         uncertainties = []
         for _ in range(1,out.size(0)):
             uncertainty = []
-            for i in range(1,2):
+            for i in range(1,6):
 
                 # retaining graph for multiple backward propagations
                 out[_,i].backward(retain_graph = True)
+                # left, up, right, down
 
                 # Loading all gradients from layers
                 all_grad = torch.Tensor()
@@ -225,11 +226,11 @@ def kfac_diag(continue_flag):
 
         return out[1:], uncertainties
 
-    num_iterations = 40
+    num_iterations = 80
     tic = time.time()
     for iteration in range(num_iterations):
         testset = KittiDetection(root='data/kitti/train.txt')
-        img_id = 206 + iteration + 160
+        img_id = 206 + iteration + 80
         image = testset.pull_image(img_id)
         # img_name = '/root/Documents/BNN_KFAC/data/kitti/testing/image_2/000402.png'
         # image = cv2.imread(img_name, cv2.IMREAD_COLOR)
@@ -273,7 +274,8 @@ def kfac_diag(continue_flag):
         mean_predictions = mean_predictions.detach()
         # const = 2*np.e*np.pi
         # entropy = 0.5 * torch.log2(const * uncertainty).detach_()
-        uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
+        # uncertainty = (uncertainty.detach() / H.numel()) ** 0.5
+        uncertainty = uncertainty.detach() ** 0.5
 
         scale = torch.Tensor(rgb_image.shape[1::-1]).repeat(2)
 
@@ -291,9 +293,14 @@ def kfac_diag(continue_flag):
             label_name = labels[index - 1]
             display_txt = '%s: %.2f'%(label_name, score) + ' '
 
+            # for i in [0,2]: unc[i+1] = unc[i+1] * 1241 / 376
+
             currentAxis = plt.gca()
             currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
-            currentAxis.text(pt[0], pt[1] - 12 if index == 1 else pt[3], display_txt + "{:.1f}e-2".format(float(unc[0]) * 10000), bbox={'facecolor':color, 'alpha':1}, fontsize = 12)
+            currentAxis.text(pt[0], pt[1] - 12 if index == 1 else pt[3], \
+                display_txt + str( "{:.2f}".format(float(unc[0])) ), \
+                #  + ' ' + ' '.join(["{:.2f}".format(float(unc[i])) for i in range(1,5)]), \
+                bbox={'facecolor':color, 'alpha':1}, fontsize = 12)
 
             # currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
             # currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':0.5}, fontsize=5)
