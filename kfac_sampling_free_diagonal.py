@@ -9,7 +9,7 @@ from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '4'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # DEVICE = torch.device('cuda:7')
 DEVICE_LIST = [0]
 
@@ -29,6 +29,7 @@ import tqdm
 import pickle
 from matplotlib import pyplot as plt
 from data import KITTI_CLASSES as labels
+import random
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -89,6 +90,14 @@ def add_gaussian_noise(image,std,mean=0):
     image[image<0] = 0
     image[image>255] = 255
     return image.astype('uint8')
+
+def add_salt_and_pepper(image,scale):
+    # (375, 1242, 3)
+    for i in range(image.shape[0]):
+        for j in range(image.shape[1]):
+            if random.random() < scale:
+                # salt and pepper
+                image[i,j,:] = random.randint(0,1) * 255
 
 def crop_image(image, coords):
     for a,b,c,d in coords:
@@ -236,7 +245,7 @@ def kfac_diag(continue_flag):
         # image = cv2.imread(img_name, cv2.IMREAD_COLOR)
 
         # INTRODUCE NOISE
-        # image = add_gaussian_noise(image,10)
+        image = add_gaussian_noise(image,10)
 
         # CROP AND BLUR IMAGE
         # [637.70557, 167.12257, 783.7215 , 230.99509]
