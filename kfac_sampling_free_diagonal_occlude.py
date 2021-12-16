@@ -245,7 +245,7 @@ def kfac_diag(continue_flag):
         # CROP AND BLUR IMAGE
         # [637.70557, 167.12257, 783.7215 , 230.99509]
         # image = crop_image(image,[[100,260,637,680]])
-        image = blur_image(image,[[167,230,637,783]],4)
+        # image = blur_image(image,[[167,230,637,783]],3.5)
 
         # RESIZE
         x = cv2.resize(image, (300, 300)).astype(np.float32)
@@ -297,7 +297,7 @@ def kfac_diag(continue_flag):
             label_name = labels[index - 1]
             display_txt = '%s: %.2f'%(label_name, score) + ' '
 
-            for i in [0,2]: unc[i+1] = unc[i+1] * 1241 / 376
+            # for i in [0,2]: unc[i+1] = unc[i+1] * 1241 / 376
 
             currentAxis = plt.gca()
             currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
@@ -306,10 +306,10 @@ def kfac_diag(continue_flag):
                 #  + ' ' + ' '.join(["{:.2f}".format(float(unc[i])) for i in range(1,5)]), \
                 bbox={'facecolor':color, 'alpha':1}, fontsize = 12)
 
-            currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
-            currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
-            currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
-            currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
+            currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*1241), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
+            currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*376 ), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
+            currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*1241), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
+            currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*376 ), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
         
         plt.show()
         # plt.savefig('foo.png')
