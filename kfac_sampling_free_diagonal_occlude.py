@@ -9,7 +9,7 @@ from utils.augmentations import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 # DEVICE = torch.device('cuda:7')
 DEVICE_LIST = [0]
 
@@ -30,6 +30,7 @@ import pickle
 from matplotlib import pyplot as plt
 from data import KITTI_CLASSES as labels
 import random
+torch.cuda.manual_seed(42)
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -146,6 +147,7 @@ def kfac_diag(continue_flag):
     colors = plt.cm.hsv(np.linspace(0, 1, 9)).tolist()
 
     kfac_direc = 'weights/diag_full.obj'
+    kfac_direc = 'weights/diag_tmp.obj'
     # kfac_direc = None
 
 
@@ -159,7 +161,7 @@ def kfac_diag(continue_flag):
         # compute KFAC Fisher Information Matrix
         diag = Diagonal(net)
 
-        for _ in range(args.start_iter, 1871):
+        for _ in tqdm.tqdm(range(args.start_iter, 1871)):
 
             images, targets = next(batch_iterator)
             images = Variable(images.cuda())
@@ -173,16 +175,17 @@ def kfac_diag(continue_flag):
             optimizer.step()
 
             diag.update(batch_size=images.size(0))
-            if (_ + 1) % 100 == 0:
-                print('Updating iter: ', _ + 1)
+            # if (_ + 1) % 100 == 0:
+            #     print('Updating iter: ', _ + 1)
 
         # inversion and sampling
         estimator = diag
 
-        # estimator.invert(add=1, multiply=2)
-
-        # saving kfac
-        file_pi = open('weights/diag_full_uninverted.obj', 'wb')
+        # estimator.invert()
+        estimator.invert(add=0.01, multiply=1)
+        diag.invert(add=0.01, multiply=1)
+        # # saving kfac
+        file_pi = open('weights/diag_tmp.obj', 'wb')
         pickle.dump(estimator, file_pi)
 
     def eval_unvertainty_diag(model, x, H, diag):
@@ -297,7 +300,7 @@ def kfac_diag(continue_flag):
             label_name = labels[index - 1]
             display_txt = '%s: %.2f'%(label_name, score) + ' '
 
-            # for i in [0,2]: unc[i+1] = unc[i+1] * 1241 / 376
+            for i in [0,2]: unc[i+1] = unc[i+1] * 1241 / 376
 
             currentAxis = plt.gca()
             currentAxis.add_patch(plt.Rectangle(*coords, fill=False, edgecolor=color, linewidth=2))
@@ -306,10 +309,10 @@ def kfac_diag(continue_flag):
                 #  + ' ' + ' '.join(["{:.2f}".format(float(unc[i])) for i in range(1,5)]), \
                 bbox={'facecolor':color, 'alpha':1}, fontsize = 12)
 
-            currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*1241), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
-            currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*376 ), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
-            currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*1241), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
-            currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*376 ), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
+            currentAxis.text(pt[0], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[1])*10), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
+            currentAxis.text((pt[0]+pt[2])/2, pt[1], "{:.2f}".format(float(unc[2])*10), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
+            currentAxis.text(pt[2], (pt[1]+pt[3])/2, "{:.2f}".format(float(unc[3])*10), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
+            currentAxis.text((pt[0]+pt[2])/2, pt[3], "{:.2f}".format(float(unc[4])*10), bbox={'facecolor':color, 'alpha':1}, fontsize=8)
         
         plt.show()
         # plt.savefig('foo.png')
