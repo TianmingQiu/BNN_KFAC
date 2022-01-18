@@ -319,7 +319,7 @@ for iteration in tqdm.tqdm(range(num_iterations)):
     #     plt.scatter(prediction[1].cpu(),unc[0].cpu(),c='r',alpha=0.25)
     # plt.scatter(minor_softmax.detach().cpu(),minor_uncertainty.cpu(),c='k',alpha=0.25)
 
-plt.xlabel('Uncertainty of traget class')
+plt.xlabel('Uncertainty of target class')
 plt.ylabel('Uncertainty of other classes')
 # plt.xlabel('SSD score')
 # plt.ylabel('Deducted uncertainty')
