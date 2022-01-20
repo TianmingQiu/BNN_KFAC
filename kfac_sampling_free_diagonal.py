@@ -179,7 +179,7 @@ def kfac_diag(continue_flag):
         # inversion and sampling
         estimator = diag
 
-        # estimator.invert(add=1, multiply=2)
+        estimator.invert(add=0.1, multiply=1)
 
         # saving kfac
         file_pi = open('weights/diag_full_uninverted.obj', 'wb')
@@ -235,7 +235,15 @@ def kfac_diag(continue_flag):
 
         return out[1:], uncertainties
 
-    num_iterations = 80
+    
+    # b = []
+    # for i,layer in enumerate(list(diag.model.modules())[1:]):
+    #     if layer in diag.state:
+    #         b_i = diag.state[layer]
+    #         b.append(torch.flatten(b_i))
+    # B = torch.cat(b, dim=0)
+
+    num_iterations = 1
     tic = time.time()
     for iteration in range(num_iterations):
         testset = KittiDetection(root='data/kitti/train.txt')
@@ -244,22 +252,11 @@ def kfac_diag(continue_flag):
         # img_name = '/root/Documents/BNN_KFAC/data/kitti/testing/image_2/000402.png'
         # image = cv2.imread(img_name, cv2.IMREAD_COLOR)
 
-        # INTRODUCE NOISE
-        image = add_gaussian_noise(image,10)
-
-        # CROP AND BLUR IMAGE
-        # [637.70557, 167.12257, 783.7215 , 230.99509]
-        # image = crop_image(image,[[167,230,637,680]])
-        # image = blur_image(image,[[167,230,637,783]],4)
-
         # RESIZE
         x = cv2.resize(image, (300, 300)).astype(np.float32)
         x -= (104.0, 117.0, 123.0)
         x = x.astype(np.float32)
         x = x[:, :, ::-1].copy()
-        # plt.imshow(x)
-        # plt.axis('off')
-        # plt.show()
         x = torch.from_numpy(x).permute(2, 0, 1)
         xx = Variable(x.unsqueeze(0))     # wrap tensor in Variable
         if torch.cuda.is_available():
@@ -277,7 +274,6 @@ def kfac_diag(continue_flag):
                 H_i = diag.inv_state[layer]
                 h.append(torch.flatten(H_i))
         H = torch.cat(h, dim=0)
-
 
         mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
         mean_predictions = mean_predictions.detach()
